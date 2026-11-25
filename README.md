@@ -1,26 +1,19 @@
 # Gateweave CLI
 
-One command line for [Gateweave](https://gateweave.com): deploy a product into your own Cloudflare
-account, update it, connect products to each other and check a deployment.
+One command line for [Gateweave](https://gateweave.com): deploy Track into your own Cloudflare
+account and check the deployment.
 
-**Status: `gateweave deploy track` and `gateweave doctor track` are written and tested against a
-fake Wrangler, git and pnpm, and not yet rehearsed against a real Cloudflare account. Nothing else
-runs yet, and it is not published, so run them from a checkout (see
-[Development](#development)).** The repository is
-private until the first version has deployed Track into an empty Cloudflare account and checked it
-from outside.
+**Status: early.** `gateweave deploy track` and `gateweave doctor track` are written and tested
+against a fake Wrangler, git and pnpm, and have not yet been rehearsed against a real Cloudflare
+account. Nothing else exists yet. Each release is a tarball you run with `npx` (see
+[Install](#install)); it is not on npm.
 
-## What it will do
+## Commands
 
-| Command                      | Purpose                                                                                                                                |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `gateweave deploy <product>` | Create what the product needs in your Cloudflare account, set its secrets, apply migrations, deploy, and check the result from outside |
-| `gateweave update <product>` | Bring a deployment to a release, keeping its names and ids                                                                             |
-| `gateweave doctor [product]` | Say what is wrong with a deployment, in words                                                                                          |
-| `gateweave connect <a> <b>`  | Connect two products by one approval                                                                                                   |
-| `gateweave runner`           | Work the issues assigned to an agent in Track with a coding agent on this machine                                                      |
-
-The first version is `deploy track` and `doctor track`.
+| Command                  | Purpose                                                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `gateweave deploy track` | Create what Track needs in your Cloudflare account, set its secrets, apply migrations, deploy, and check the result from outside |
+| `gateweave doctor track` | Say what is wrong with a Track deployment, in words                                                                              |
 
 ## `gateweave deploy track`
 
@@ -150,6 +143,11 @@ node packages/cli/dist/bin.js deploy track --help
 
 The tests fake Wrangler, git and pnpm and never reach Cloudflare. Rehearse a real deploy only in a
 separate, empty Cloudflare account.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 
