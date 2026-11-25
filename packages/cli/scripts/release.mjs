@@ -294,8 +294,9 @@ async function main() {
 
 	const commit = run("git", ["rev-parse", "HEAD"], { cwd: root, quiet: true });
 	if (!dryRun) {
-		if (run("git", ["status", "--porcelain", "--", "."], { cwd: packageDir, quiet: true })) {
-			stop("packages/cli has changes that aren't committed. Release from a clean commit.");
+		// LICENSE ships from the repository root, so the whole tree has to be clean, not only this package.
+		if (run("git", ["status", "--porcelain"], { cwd: root, quiet: true })) {
+			stop("The repository has changes that aren't committed. Release from a clean commit.");
 		}
 		const onMain = spawnSync("git", ["merge-base", "--is-ancestor", "HEAD", "origin/main"], {
 			cwd: root,
