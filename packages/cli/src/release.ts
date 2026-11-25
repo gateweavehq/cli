@@ -7,7 +7,7 @@ const TRACK_RAW = "https://raw.githubusercontent.com/gateweavehq/track";
 
 const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 
-function compareTags(a: string, b: string): number {
+export function compareTags(a: string, b: string): number {
 	const pa = RELEASE_TAG.exec(a)?.slice(1).map(Number) ?? [];
 	const pb = RELEASE_TAG.exec(b)?.slice(1).map(Number) ?? [];
 	for (let i = 0; i < 3; i++) {
@@ -69,6 +69,8 @@ export interface Pins {
 	nodeMajor: number;
 	/** The Durable Object classes its top-level `wrangler.jsonc` binds. */
 	durableObjects: string[];
+	/** The secrets its `wrangler.jsonc` lists under `secrets.required`. */
+	requiredSecrets: string[];
 }
 
 async function rawFile(sys: System, release: string, path: string): Promise<string> {
@@ -97,10 +99,15 @@ export async function readPins(sys: System, release: string): Promise<Pins> {
 	]);
 	const config = parse(wranglerConfig) as {
 		durable_objects?: { bindings?: { class_name?: string }[] };
+		secrets?: { required?: unknown };
 	};
 	const durableObjects = (config.durable_objects?.bindings ?? [])
 		.map(({ class_name }) => class_name)
 		.filter((name): name is string => typeof name === "string");
+	const required = config.secrets?.required;
+	const requiredSecrets = Array.isArray(required)
+		? required.filter((name): name is string => typeof name === "string")
+		: [];
 	const root = JSON.parse(rootManifest) as {
 		packageManager?: string;
 		engines?: { node?: string };
@@ -120,5 +127,5 @@ export async function readPins(sys: System, release: string): Promise<Pins> {
 			`Track ${release} does not name an exact pnpm and Wrangler version.`,
 		);
 	}
-	return { pnpm, wrangler, nodeMajor, durableObjects };
+	return { pnpm, wrangler, nodeMajor, durableObjects, requiredSecrets };
 }

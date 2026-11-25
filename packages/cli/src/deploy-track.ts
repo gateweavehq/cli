@@ -34,13 +34,13 @@ export interface DeployTrackResult {
 	next: string;
 }
 
-interface Account {
+export interface Account {
 	id: string;
 	name: string;
 }
 
 /** Parses the JSON a command printed, skipping anything before it. */
-function json<T>(text: string): T {
+export function json<T>(text: string): T {
 	const start = text.search(/[[{]/);
 	if (start < 0) throw new Error("no JSON in the output");
 	return JSON.parse(text.slice(start)) as T;
@@ -280,7 +280,7 @@ export async function deployTrack(
 	};
 }
 
-async function chooseAccount(
+export async function chooseAccount(
 	sys: System,
 	wrangler: (args: string[]) => Promise<RunResult>,
 	pins: Pins,
@@ -325,7 +325,7 @@ async function chooseAccount(
 }
 
 /** Wrangler's output without colour codes, so a forced colour cannot hide a name from a match. */
-function plain(text: string): string {
+export function plain(text: string): string {
 	return stripVTControlCharacters(text);
 }
 

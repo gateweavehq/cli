@@ -7,6 +7,8 @@ export interface CheckResult {
 }
 
 interface Check {
+	/** Stable, for the findings of `gateweave doctor`. */
+	id: string;
 	name: string;
 	request(address: string): {
 		path: string;
@@ -24,6 +26,7 @@ interface Check {
  */
 const CHECKS: Check[] = [
 	{
+		id: "sign-in-page",
 		name: "the sign-in page answers and is Track's",
 		request: () => ({ path: "/login" }),
 		judge: ({ status, text }) => {
@@ -34,6 +37,7 @@ const CHECKS: Check[] = [
 		},
 	},
 	{
+		id: "accounts",
 		name: "accounts are looked up",
 		request: (address) => ({
 			path: "/api/auth/sign-in/email",
@@ -48,11 +52,13 @@ const CHECKS: Check[] = [
 			status === 401 || status === 403 ? null : `answered ${status}, not 401 or 403`,
 	},
 	{
+		id: "sync-gateway",
 		name: "the sync gateway turns away a request without a session",
 		request: () => ({ path: "/api/sync/deploy-check/snapshot" }),
 		judge: ({ status }) => (status === 401 ? null : `answered ${status}, not 401`),
 	},
 	{
+		id: "mcp-endpoint",
 		name: "the MCP endpoint turns away a request without a token",
 		request: () => ({
 			path: "/mcp",
@@ -73,6 +79,24 @@ const CHECKS: Check[] = [
 ];
 
 export const CHECK_NAMES = CHECKS.map(({ name }) => name);
+export const CHECK_IDS = CHECKS.map(({ id }) => id);
+
+/**
+ * Whether `/mcp` is on: it answers 401 with a Bearer challenge once `BETTER_AUTH_URL` pins the
+ * address, and 404 before. Null when it answered neither, or not at all.
+ */
+export async function mcpIsOn(sys: System, address: string): Promise<boolean | null> {
+	const check = CHECKS.find(({ id }) => id === "mcp-endpoint");
+	if (!check) return null;
+	const { path, ...request } = check.request(address);
+	try {
+		const { status, headers } = await sys.fetch(new URL(path, address).href, request);
+		if (status === 404) return false;
+		return status === 401 && /^Bearer /.test(headers["www-authenticate"] ?? "") ? true : null;
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Runs every check against the address, retrying each for up to `withinMs` while a new
