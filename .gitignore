@@ -1,27 +1,13 @@
 node_modules
 dist
 coverage
-.output
-.wrangler
-.tanstack
-playwright-report
-test-results
 *.tsbuildinfo
-worker-configuration.d.ts
 
 # Local secrets
-.dev.vars
-.dev.vars.*
-!.dev.vars.example
 .env
 .env.*
-# Only select the Wrangler environment for `vite build --mode <env>`; they hold no secrets.
-!apps/web/.env.staging
-!apps/web/.env.demo
 
 # Git worktrees that coding agents work in
 .claude/worktrees/
 
 .DS_Store
-test-results-perf
-test-results-smoke
