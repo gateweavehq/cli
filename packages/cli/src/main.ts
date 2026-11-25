@@ -3,6 +3,7 @@ import { type DeployTrackResult, deployTrack } from "./deploy-track.ts";
 import { type DoctorTrackResult, doctorTrack } from "./doctor-track.ts";
 import { CliError } from "./errors.ts";
 import type { System } from "./system.ts";
+import { version } from "./version.ts";
 
 const USAGE = `Usage: gateweave deploy track [options]
 
@@ -19,6 +20,7 @@ Options:
   --yes               Create without asking. Needed when there is no terminal.
   --json              Print the result, or the failure, as one JSON object on stdout.
   --help              Show this.
+  --version           Print the version.
 `;
 
 const DOCTOR_USAGE = `Usage: gateweave doctor track [options]
@@ -97,6 +99,10 @@ export async function main(argv: string[], sys: System): Promise<number> {
 		json = values.json === true;
 		const command = positionals.join(" ");
 		const doctor = command === "doctor track";
+		if (values.version) {
+			sys.out(`${version()}\n`);
+			return 0;
+		}
 		if (values.help) {
 			sys.err(doctor ? DOCTOR_USAGE : USAGE);
 			return 0;
@@ -168,6 +174,7 @@ function parse(argv: string[]) {
 			yes: { type: "boolean", short: "y" },
 			json: { type: "boolean" },
 			help: { type: "boolean", short: "h" },
+			version: { type: "boolean" },
 		},
 	});
 }
