@@ -1,0 +1,36 @@
+// A shortened copy of the top of Track's wrangler.jsonc, with one environment below it.
+{
+	"$schema": "apps/web/node_modules/wrangler/config-schema.json",
+	"name": "gateweave-track",
+	"main": "apps/web/src/server.ts",
+	"compatibility_date": "2026-10-01",
+	"keep_vars": true,
+	// Workspace directory and auth. The database is provisioned on first deploy.
+	"d1_databases": [
+		{ "binding": "DB", "database_name": "gateweave-track", "migrations_dir": "apps/web/migrations" }
+	],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "WORKSPACE", "class_name": "WorkspaceDO" },
+			{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }
+		]
+	},
+	// Files attached to descriptions and comments.
+	"r2_buckets": [{ "binding": "FILES", "bucket_name": "gateweave-track-files" }],
+	"secrets": { "required": ["BETTER_AUTH_SECRET"] },
+	"env": {
+		"cloud": {
+			"name": "gateweave-track",
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "gateweave-track-eu",
+					"migrations_dir": "apps/web/migrations"
+				}
+			],
+			"r2_buckets": [
+				{ "binding": "FILES", "bucket_name": "gateweave-track-files-eu", "jurisdiction": "eu" }
+			]
+		}
+	}
+}

@@ -6,7 +6,7 @@ Guidance for AI coding agents and people working in this repository.
 
 The Gateweave command line. It deploys, updates, connects and checks Gateweave products
 (Track, Agents, ID, Mail, Guard, Backup) in a person's own Cloudflare account. Requirements are
-on the board issue WEB-75; read them before writing code.
+on the project's board; read them before writing code.
 
 ## Invariants
 
