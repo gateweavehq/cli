@@ -310,7 +310,7 @@ export async function chooseAccount(
 				`The account ${id} is not one this sign-in reaches. It reaches:\n${list}`,
 			);
 		}
-		return account;
+		return pick(account);
 	}
 	const [only, ...more] = accounts;
 	if (!only) throw new CliError("account", "no-account", "This sign-in reaches no account.");
@@ -321,7 +321,15 @@ export async function chooseAccount(
 			`This sign-in reaches several accounts; choose one with --account <id> or CLOUDFLARE_ACCOUNT_ID:\n${list}`,
 		);
 	}
-	return only;
+	return pick(only);
+}
+
+/**
+ * Wrangler's account record carries settings and often an owner's email address as the name's
+ * neighbour; people paste our output into issues, so only the id and the name travel on.
+ */
+function pick({ id, name }: Account): Account {
+	return { id, name };
 }
 
 /** Wrangler's output without colour codes, so a forced colour cannot hide a name from a match. */

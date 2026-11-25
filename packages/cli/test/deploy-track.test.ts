@@ -196,6 +196,21 @@ describe("gateweave deploy track", () => {
 		assert.deepEqual(chosen.result.account, { id: "2222", name: "Second" });
 	});
 
+	test("prints the account's id and name and nothing else of Wrangler's record", async () => {
+		const raw = {
+			id: "a1b2c3",
+			name: "owner@example.invalid's Account",
+			created_on: "2020-01-01T00:00:00Z",
+			type: "standard",
+			legacy_flags: { enterprise: false },
+			settings: { abuse_contact_email: "owner@example.invalid", enforce_twofactor: false },
+		};
+		const { code, result } = await deploy(["--yes", "--json"], { accounts: [raw] });
+		assert.equal(code, 0);
+		assert.deepEqual(result.account, { id: "a1b2c3", name: raw.name });
+		assert.doesNotMatch(JSON.stringify(result), /abuse_contact_email|legacy_flags|created_on/);
+	});
+
 	test("takes the account from CLOUDFLARE_ACCOUNT_ID", async () => {
 		const accounts = [
 			{ id: "1111", name: "First" },

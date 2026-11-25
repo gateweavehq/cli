@@ -26,6 +26,8 @@ export interface Call {
 export interface Account {
 	id: string;
 	name: string;
+	/** What Wrangler's real record adds: settings, legacy flags, dates. None may reach the output. */
+	[extra: string]: unknown;
 }
 
 export interface FakeOptions {

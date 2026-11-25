@@ -51,6 +51,7 @@ and once the Worker it deployed is gone the record is ignored, so a name someone
 removal by hand is refused.
 
 With `--json`, stdout holds one object: the result, or `{ "ok": false, "code", "reason" }`.
+In the result, `account` is `{ "id", "name" }` and nothing else of Wrangler's account record.
 
 | Exit code | Meaning                                                                                   |
 | --------- | ----------------------------------------------------------------------------------------- |
