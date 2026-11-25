@@ -30,7 +30,8 @@ A bot asks you to sign on your first pull request. To sign, reply with the sente
 ## Before you open a pull request
 
 ```sh
-pnpm verify      # what CI runs, minus the second operating system
+pnpm verify      # Biome, typecheck, tests, build: CI minus the second operating system
+pnpm --filter gateweave release --dry-run   # the release check CI also runs
 ```
 
 `pnpm format` fixes most Biome findings. Fill in the pull request template. You don't need to edit

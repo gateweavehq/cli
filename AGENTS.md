@@ -30,6 +30,6 @@ Cloudflare account.
 
 ## Git and pull requests
 
-- `main` is protected: changes land through pull requests with green checks.
+- Changes land through pull requests with green checks.
 - Conventional Commits. No AI attribution in commits, pull requests or comments.
 - Pull requests leave `CHANGELOG.md` alone; a maintainer adds each version's entry when releasing.

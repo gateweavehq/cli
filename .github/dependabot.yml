@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Workflow actions are pinned; keep them current.
+  # Keep workflow actions current.
   - package-ecosystem: github-actions
     directory: /
     schedule:

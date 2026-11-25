@@ -8,7 +8,7 @@ The Gateweave command line is in early development. Security fixes go into `main
 
 Please report vulnerabilities privately, never in a public issue or pull request.
 
-- Preferred: [open a private security advisory](https://github.com/gateweavehq/track/security/advisories/new)
+- Preferred: [open a private security advisory](https://github.com/gateweavehq/cli/security/advisories/new)
   on GitHub.
 - Or email **security@gateweave.com**.
 
