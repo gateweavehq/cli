@@ -4,9 +4,8 @@ Guidance for AI coding agents and people working in this repository.
 
 ## The project
 
-The Gateweave command line. It deploys, updates, connects and checks Gateweave products
-(Track, Agents, ID, Mail, Guard, Backup) in a person's own Cloudflare account. Requirements are
-on the project's board; read them before writing code.
+The Gateweave command line. It deploys and checks Gateweave Track in a person's own
+Cloudflare account.
 
 ## Invariants
 
@@ -19,8 +18,8 @@ on the project's board; read them before writing code.
 4. **A second run finishes the first and does nothing twice.**
 5. **The tool holds no logic a product's own deploy lacks.** It runs each product's repository at
    a release tag; it does not fork their configuration.
-6. **Never run against Gateweave's own Cloudflare account** in tests or by hand. Rehearse in a
-   separate, empty account.
+6. **Never run against a Cloudflare account that holds anything you care about** in tests or by
+   hand. Rehearse only in a separate, empty account.
 
 ## Code style
 
