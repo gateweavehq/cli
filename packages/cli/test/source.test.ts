@@ -12,7 +12,9 @@ test("the source never deploys, migrates or makes a secret itself", () => {
 		const text = readFileSync(join(src, file), "utf8");
 		for (const pattern of [
 			/["'`]deploy["'`]\s*,\s*["'`]--/,
-			/migrations/,
+			/migrations\s+apply|["'`]migrations["'`]\s*,\s*["'`]apply/,
+			// Any `d1 migrations <something>` other than `list`: apply, or a subcommand held in a variable.
+			/["'`]d1["'`]\s*,\s*["'`]migrations["'`](?!\s*,\s*["'`]list["'`])/,
 			/--secrets-file/,
 			/randomBytes|randomUUID|getRandomValues/,
 			/"secret",\s*"put"/,

@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { type DeployTrackResult, deployTrack } from "./deploy-track.ts";
+import { type DoctorTrackResult, doctorTrack } from "./doctor-track.ts";
 import { CliError } from "./errors.ts";
 import type { System } from "./system.ts";
 
@@ -18,6 +19,25 @@ Options:
   --yes               Create without asking. Needed when there is no terminal.
   --json              Print the result, or the failure, as one JSON object on stdout.
   --help              Show this.
+`;
+
+const DOCTOR_USAGE = `Usage: gateweave doctor track [options]
+
+Says what is wrong with a Track deployment, in words. It reads and changes nothing in your
+Cloudflare account, and never shows a secret's value.
+
+It works from the record \`gateweave deploy track\` keeps or, for a deployment made another way (the
+Deploy button, a clone), from --name and --url.
+
+Options:
+  --name <name>       The Worker, and the D1 database of the same name. Default: gateweave-track
+  --url <address>     The address to check from outside. Default: the record's.
+  --account <id>      The Cloudflare account, when the sign-in reaches several.
+                      Default: CLOUDFLARE_ACCOUNT_ID.
+  --json              Print the findings as a JSON array on stdout.
+  --help              Show this.
+
+Each finding is ok, warn or fail. The exit code is 1 when there is a fail, else 0.
 `;
 
 // Worker and bucket names allow lowercase letters, digits and dashes; the bucket adds "-files"
@@ -42,6 +62,20 @@ function describe(result: DeployTrackResult): string {
 	return `${lines.join("\n")}\n`;
 }
 
+const MARK = { ok: "ok  ", warn: "WARN", fail: "FAIL" } as const;
+
+function describeDoctor(result: DoctorTrackResult): string {
+	const lines = [`Track in ${result.account.name} (${result.account.id}):`, ""];
+	for (const { status, message, fix } of result.findings) {
+		lines.push(`  ${MARK[status]}  ${message}`);
+		if (fix) lines.push(`        Fix: ${fix}`);
+	}
+	const count = (status: string) =>
+		result.findings.filter((found) => found.status === status).length;
+	lines.push("", `${count("fail")} to fix, ${count("warn")} to look at, ${count("ok")} fine.`);
+	return `${lines.join("\n")}\n`;
+}
+
 /** Runs the command line and returns its exit code. */
 export async function main(argv: string[], sys: System): Promise<number> {
 	let json = argv.includes("--json");
@@ -61,15 +95,28 @@ export async function main(argv: string[], sys: System): Promise<number> {
 		}
 		const { values, positionals } = parsed;
 		json = values.json === true;
+		const command = positionals.join(" ");
+		const doctor = command === "doctor track";
 		if (values.help) {
-			sys.err(USAGE);
+			sys.err(doctor ? DOCTOR_USAGE : USAGE);
 			return 0;
 		}
-		if (positionals.join(" ") !== "deploy track") {
+		if (command !== "deploy track" && !doctor) {
 			throw new CliError(
 				"usage",
 				"usage",
-				`This version knows one command, \`gateweave deploy track\`.\n\n${USAGE}`,
+				`This version knows two commands, \`gateweave deploy track\` and \`gateweave doctor track\`.\n\n${USAGE}`,
+			);
+		}
+		// Another command's options are refused, not ignored, so a typo cannot pass for a choice.
+		const foreign = (doctor ? ["release", "no-attachments", "yes"] : ["url"]).filter(
+			(option) => values[option as keyof typeof values] !== undefined,
+		);
+		if (foreign.length > 0) {
+			throw new CliError(
+				"usage",
+				"usage",
+				`\`gateweave ${command}\` has no option --${foreign[0]}.\n\n${doctor ? DOCTOR_USAGE : USAGE}`,
 			);
 		}
 		const name = values.name ?? "gateweave-track";
@@ -79,6 +126,18 @@ export async function main(argv: string[], sys: System): Promise<number> {
 				"bad-name",
 				`"${name}" cannot name a Worker and a bucket: use lowercase letters, digits and dashes, at most 57 characters, not starting or ending with a dash.`,
 			);
+		}
+		if (doctor) {
+			if (values.url !== undefined && !/^https?:\/\/[^\s/]+/.test(values.url)) {
+				throw new CliError(
+					"usage",
+					"bad-url",
+					`"${values.url}" is not an address: use https://<host>.`,
+				);
+			}
+			const found = await doctorTrack(sys, { name, account: values.account, url: values.url });
+			sys.out(json ? `${JSON.stringify(found.findings)}\n` : describeDoctor(found));
+			return found.findings.some(({ status }) => status === "fail") ? 1 : 0;
 		}
 		const result = await deployTrack(sys, {
 			name,
@@ -102,6 +161,7 @@ function parse(argv: string[]) {
 		strict: true,
 		options: {
 			name: { type: "string" },
+			url: { type: "string" },
 			release: { type: "string" },
 			account: { type: "string" },
 			"no-attachments": { type: "boolean" },

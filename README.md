@@ -3,9 +3,10 @@
 One command line for [Gateweave](https://gateweave.com): deploy a product into your own Cloudflare
 account, update it, connect products to each other and check a deployment.
 
-**Status: `gateweave deploy track` is written and tested against a fake Wrangler, git and pnpm,
-and not yet rehearsed against a real Cloudflare account. Nothing else runs yet, and it is not
-published, so run it from a checkout (see [Development](#development)).** The repository is
+**Status: `gateweave deploy track` and `gateweave doctor track` are written and tested against a
+fake Wrangler, git and pnpm, and not yet rehearsed against a real Cloudflare account. Nothing else
+runs yet, and it is not published, so run them from a checkout (see
+[Development](#development)).** The repository is
 private until the first version has deployed Track into an empty Cloudflare account and checked it
 from outside.
 
@@ -70,6 +71,44 @@ With `--json`, stdout holds one object: the result, or `{ "ok": false, "code", "
 | 7         | No yes: declined, or no terminal and no `--yes`; nothing was created                      |
 | 8         | Fetching, installing or Track's deploy failed; run it again to finish                     |
 | 9         | Deployed, but a check from outside failed, or the address is unknown                      |
+
+## `gateweave doctor track`
+
+```
+gateweave doctor track [--name <name>] [--url <address>] [--account <id>] [--json]
+```
+
+Says what is wrong with a Track deployment, in words. It reads and changes nothing in your
+Cloudflare account, prints names and never a secret's value, and needs the same sign-in as
+`deploy track`. It works from the record `deploy track` keeps, or, for a deployment made another
+way (the Deploy button, a clone), from `--name` (the Worker, and a D1 database of the same name)
+and `--url`.
+
+Each finding is `ok`, `warn` or `fail`, with one sentence and the fix, a command or a link to
+Track's [self-hosting guide](https://github.com/gateweavehq/track/blob/main/docs/self-hosting.md):
+
+| Finding id        | What it says                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worker`          | The Worker exists in the account, shown by name and id. If not, nothing else is tried.                                             |
+| `secret-<name>`   | One for each secret in `secrets.required` of the release's `wrangler.jsonc`: set, or missing (`fail`)                              |
+| `release`         | Against the newest tag of Track: older is a `warn`. A deployment this tool did not make has an unknown release.                    |
+| `migrations`      | Migrations not applied yet (`fail`, or `warn` when the release is only guessed to be the newest)                                   |
+| `sign-up`         | Open is a `warn`, by invitation is `ok`. From the sign-in page when it says so, else one fixed `SELECT` on the deployment's own D1 |
+| `first-account`   | No account yet is a `warn`: whoever opens the address first owns the server                                                        |
+| `mcp`             | `BETTER_AUTH_URL` unset: MCP is off, a `warn` with the command                                                                     |
+| `outside-<check>` | The checks `deploy track` ends with, tried once each                                                                               |
+
+Without `--url` and without a record, nothing can be checked from outside and `outside` says so.
+The migrations and the sign-up query run in the release's files in the cache folder (the
+checkout `deploy track` made, or a shallow clone of the release when there is none), with the
+deployment's names in its `wrangler.jsonc`, written again on every run. Everything run against
+Cloudflare reads: `whoami`, `secret list`, `d1 list`, that one `d1 execute` and, only when it
+finds Wrangler's migrations table, `d1 migrations list` (Wrangler would create the table if it were
+missing, so a database without it gets a `warn` and is left alone).
+
+With `--json`, stdout is an array of `{ "id", "status", "message", "fix" }`. The exit code is 0
+without a `fail` and 1 with one; a sign-in or an account to choose stops it earlier with the exit
+codes 3 and 4 above, and a usage error with 2.
 
 ## Principles
 

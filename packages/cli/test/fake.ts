@@ -45,6 +45,20 @@ export interface FakeOptions {
 	/** Overrides the answer of a path on the deployed address. */
 	respond?: Record<string, HttpResponse>;
 	signedIn?: boolean;
+	/** The secrets of a Worker, by name. A Worker not listed has the ones its release requires. */
+	secrets?: Record<string, readonly string[]>;
+	/** Migrations the database has not applied yet. */
+	pending?: readonly string[];
+	/** What the deployment's database holds. Default: open, with no account. */
+	deployment?: { signUp: "open" | "closed" | null; hasAccounts: boolean };
+	/** Makes the sign-up query fail, as on a database whose tables are missing. */
+	signUpQueryFails?: boolean;
+	/** Whether the database has Wrangler's migrations table. Default: it has. */
+	migrationsTable?: boolean;
+	/** Makes `d1 migrations list` fail. */
+	migrationsListFails?: boolean;
+	/** Makes `git clone` fail. */
+	cloneFails?: boolean;
 }
 
 /**
@@ -58,7 +72,14 @@ export function fakeSystem(options: FakeOptions = {}) {
 		workers: new Set(options.workers ?? []),
 		databases: new Map((options.databases ?? []).map((name) => [name, `uuid-${name}`])),
 		buckets: new Set(options.buckets ?? []),
+		secrets: new Map(
+			Object.entries(options.secrets ?? {}).map(([name, list]) => [name, new Set(list)]),
+		),
+		/** Set when a command created the migrations table, as the real `d1 migrations list` does. */
+		migrationsTableCreated: false,
 	};
+	const secretsOf = (worker: string) =>
+		cloud.secrets.get(worker) ?? new Set(["BETTER_AUTH_SECRET"]);
 	const calls: Call[] = [];
 	/** Calls, questions and pauses in the order they happened. */
 	const events: string[] = [];
@@ -69,7 +90,7 @@ export function fakeSystem(options: FakeOptions = {}) {
 	const ok = (stdout = ""): RunResult => ({ status: 0, stdout, stderr: "" });
 	const failed = (stderr: string): RunResult => ({ status: 1, stdout: "", stderr });
 
-	function wrangler(args: string[], accountId: string | undefined): RunResult {
+	function wrangler(args: string[], accountId: string | undefined, cwd: string): RunResult {
 		const [first, second] = args;
 		if (first === "whoami") {
 			if (options.signedIn === false) return failed('{"loggedIn":false}');
@@ -78,7 +99,13 @@ export function fakeSystem(options: FakeOptions = {}) {
 		if (!accountId) return failed("More than one account available but unable to select one");
 		if (first === "secret" && second === "list") {
 			const name = args[args.indexOf("--name") + 1] ?? "";
-			return cloud.workers.has(name) ? ok("[]") : failed(`✘ [ERROR] Worker "${name}" not found.\n`);
+			return cloud.workers.has(name)
+				? ok(
+						JSON.stringify(
+							[...secretsOf(name)].map((secret) => ({ name: secret, type: "secret_text" })),
+						),
+					)
+				: failed(`✘ [ERROR] Worker "${name}" not found.\n`);
 		}
 		if (first === "d1" && second === "list") {
 			return ok(JSON.stringify([...cloud.databases].map(([name, uuid]) => ({ name, uuid }))));
@@ -95,12 +122,58 @@ export function fakeSystem(options: FakeOptions = {}) {
 				`${white("name:")}           ${gray(name)}\n${white("creation_date:")}  ${gray("2026-11-01T00:00:00.000Z")}`;
 			return ok(`Listing buckets...\n${[...cloud.buckets].map(bucket).join("\n\n")}\n`);
 		}
+		if (first === "d1" && (second === "migrations" || second === "execute")) {
+			// Both read the database named in the wrangler.jsonc of the folder they run in.
+			let database: string | undefined;
+			try {
+				const config = parse(readFileSync(join(cwd, "wrangler.jsonc"), "utf8")) as {
+					d1_databases: { binding: string; database_name: string }[];
+				};
+				database = config.d1_databases.find(({ binding }) => binding === "DB")?.database_name;
+			} catch {
+				return failed("✘ [ERROR] Couldn't find a Wrangler configuration file.");
+			}
+			if (!database || !cloud.databases.has(database)) {
+				return failed(`✘ [ERROR] Couldn't find a D1 DB with the name or binding "DB"`);
+			}
+			if (second === "migrations" && args[2] === "list") {
+				if (options.migrationsListFails) return failed("✘ [ERROR] Something went wrong.");
+				if (options.migrationsTable === false) cloud.migrationsTableCreated = true;
+				const pending = options.pending ?? [];
+				if (pending.length === 0)
+					return ok("Resource location: remote\n✅ No migrations to apply!\n");
+				const rows = pending.map((name) => `│ ${name} │`).join("\n");
+				return ok(
+					`Resource location: remote\nMigrations to be applied:\n┌──────┐\n│ name │\n├──────┤\n${rows}\n└──────┘\n`,
+				);
+			}
+			if (second === "execute") {
+				if (options.signUpQueryFails) return failed("✘ [ERROR] no such table: deployment");
+				const state = options.deployment ?? { signUp: "open", hasAccounts: false };
+				return ok(
+					JSON.stringify([
+						{
+							results: [
+								{
+									sign_up: state.signUp,
+									has_accounts: state.hasAccounts ? 1 : 0,
+									has_migrations_table: options.migrationsTable === false ? 0 : 1,
+								},
+							],
+							success: true,
+							meta: {},
+						},
+					]),
+				);
+			}
+		}
 		return failed(`the fake does not know wrangler ${args.join(" ")}`);
 	}
 
 	function deploy(cwd: string): RunResult {
 		const config = parse(readFileSync(join(cwd, "wrangler.jsonc"), "utf8")) as {
 			name: string;
+			secrets?: { required?: string[] };
 			d1_databases: { database_name: string }[];
 			r2_buckets?: { bucket_name: string }[];
 		};
@@ -108,6 +181,7 @@ export function fakeSystem(options: FakeOptions = {}) {
 		const database = config.d1_databases[0]?.database_name ?? "";
 		const bucket = config.r2_buckets?.[0]?.bucket_name;
 		cloud.workers.add(worker);
+		cloud.secrets.set(worker, new Set(config.secrets?.required ?? []));
 		if (!cloud.databases.has(database)) cloud.databases.set(database, `uuid-${database}`);
 		if (bucket) cloud.buckets.add(bucket);
 		return ok(
@@ -131,6 +205,7 @@ export function fakeSystem(options: FakeOptions = {}) {
 					);
 				}
 				if (args.includes("clone")) {
+					if (options.cloneFails) return failed("fatal: unable to access the repository");
 					const target = args[args.length - 1] ?? "";
 					mkdirSync(target, { recursive: true });
 					writeFileSync(join(target, "wrangler.jsonc"), WRANGLER_CONFIG);
@@ -140,7 +215,8 @@ export function fakeSystem(options: FakeOptions = {}) {
 			if (command === sys.execPath && basename(args[0] ?? "") === "npx-cli.js") {
 				const rest = args.slice(1);
 				if (rest[0] === "--version") return ok("11.6.0");
-				if (rest[1] === `wrangler@${WRANGLER}`) return wrangler(rest.slice(2), accountId);
+				if (rest[1] === `wrangler@${WRANGLER}`)
+					return wrangler(rest.slice(2), accountId, runOptions.cwd);
 				if (rest[1] === `pnpm@${PNPM}`) {
 					if (rest[2] === "install") return ok();
 					if (rest[2] === "run" && rest[3] === "deploy") return deploy(runOptions.cwd);
@@ -216,6 +292,8 @@ const READ_ONLY = [
 	/ wrangler@[\d.]+ whoami --json$/,
 	/ wrangler@[\d.]+ secret list --name \S+ --format json$/,
 	/ wrangler@[\d.]+ d1 list --json$/,
+	/ wrangler@[\d.]+ d1 migrations list DB --remote$/,
+	/ wrangler@[\d.]+ d1 execute DB --remote --json --command SELECT [^;]*$/,
 	/ wrangler@[\d.]+ r2 bucket list$/,
 ];
 
