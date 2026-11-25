@@ -101,8 +101,10 @@ Track's [self-hosting guide](https://github.com/gateweavehq/track/blob/main/docs
 Without `--url` and without a record, nothing can be checked from outside and `outside` says so.
 The migrations and the sign-up query run in the release's files in the cache folder (the
 checkout `deploy track` made, or a shallow clone of the release when there is none), with the
-deployment's names in its `wrangler.jsonc`. Everything run against Cloudflare reads: `whoami`,
-`secret list`, `d1 list`, `d1 migrations list` and that one `d1 execute`.
+deployment's names in its `wrangler.jsonc`, written again on every run. Everything run against
+Cloudflare reads: `whoami`, `secret list`, `d1 list`, that one `d1 execute` and, only when it
+finds Wrangler's migrations table, `d1 migrations list` (Wrangler would create the table if it were
+missing, so a database without it gets a `warn` and is left alone).
 
 With `--json`, stdout is an array of `{ "id", "status", "message", "fix" }`. The exit code is 0
 without a `fail` and 1 with one; a sign-in or an account to choose stops it earlier with the exit

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, describe, test } from "node:test";
 import { CHECK_IDS } from "../src/checks.ts";
 import { type Finding, SIGN_UP_QUERY } from "../src/doctor-track.ts";
 import { main } from "../src/main.ts";
+import { cacheDir } from "../src/paths.ts";
 import { type FakeOptions, fakeSystem, RELEASE, readsOnly } from "./fake.ts";
 
 const homes: string[] = [];
@@ -114,6 +116,25 @@ describe("gateweave doctor track, on a deployment this tool made", () => {
 		assert.equal(calls.filter((call) => call.argv.includes("clone")).length, 0);
 	});
 
+	test("a checkout left half written by a cut-short deploy is renamed before it is read", async () => {
+		const fake = await deployed({}, ["--name", "gwcli-s2-a1b2c3"]);
+		// The deploy writes the names last: put Track's own, as a run cut short at install leaves them.
+		const checkout = join(cacheDir(fake.sys), "track", `${RELEASE}-gwcli-s2-a1b2c3`);
+		writeFileSync(
+			join(checkout, "wrangler.jsonc"),
+			readFileSync(new URL("./fixtures/wrangler.jsonc", import.meta.url), "utf8"),
+		);
+		fake.cloud.databases.set("gateweave-track", "uuid-someone-elses");
+		const { code, calls } = await doctor(fake, ["--name", "gwcli-s2-a1b2c3"]);
+		assert.equal(code, 0);
+		assert.match(readFileSync(join(checkout, "wrangler.jsonc"), "utf8"), /"gwcli-s2-a1b2c3"/);
+		assert.doesNotMatch(
+			readFileSync(join(checkout, "wrangler.jsonc"), "utf8"),
+			/"database_name": "gateweave-track"/,
+		);
+		assert.ok(calls.some((call) => call.argv.includes("execute")));
+	});
+
 	test("a database deleted by hand is a fail", async () => {
 		const fake = await deployed();
 		fake.cloud.databases.clear();
@@ -178,6 +199,40 @@ describe("gateweave doctor track, on a deployment this tool did not make", () =>
 		assert.equal(by("sign-up"), undefined);
 	});
 
+	test("a database without the migrations table is a warning, and is not asked to list", async () => {
+		const fake = fresh({ ...existing, migrationsTable: false });
+		const { code, by, calls } = await doctor(fake, args);
+		assert.equal(code, 0);
+		assert.equal(by("migrations")?.status, "warn");
+		assert.match(by("migrations")?.message ?? "", /no migrations table/);
+		// Listing would create the table in a database doctor did not make.
+		assert.equal(calls.filter((call) => call.argv.includes("migrations")).length, 0);
+		assert.equal(fake.cloud.migrationsTableCreated, false);
+	});
+
+	test("when the database cannot be read, migrations are not listed and it says so", async () => {
+		const { code, by, calls } = await doctor(fresh({ ...existing, signUpQueryFails: true }), args);
+		assert.equal(code, 0);
+		assert.equal(by("migrations")?.status, "warn");
+		assert.match(by("migrations")?.message ?? "", /could not be told.*could not be read/);
+		assert.equal(calls.filter((call) => call.argv.includes("migrations")).length, 0);
+	});
+
+	test("a failing migrations list is a warning that says it could not be told", async () => {
+		const { code, by } = await doctor(fresh({ ...existing, migrationsListFails: true }), args);
+		assert.equal(code, 0);
+		assert.equal(by("migrations")?.status, "warn");
+		assert.match(by("migrations")?.message ?? "", /could not be told/);
+	});
+
+	test("a release that cannot be cloned is a warning for the migrations and the sign-up", async () => {
+		const { code, by } = await doctor(fresh({ ...existing, cloneFails: true }), args);
+		assert.equal(code, 0);
+		assert.equal(by("migrations")?.status, "warn");
+		assert.match(by("migrations")?.message ?? "", /could not be fetched/);
+		assert.equal(by("sign-up")?.status, "warn");
+	});
+
 	test("without an address nothing is checked from outside, and it says so", async () => {
 		const { code, by } = await doctor(fresh(existing), ["--name", "legacy-track"]);
 		assert.equal(code, 0);
@@ -205,7 +260,7 @@ describe("sign-up and MCP", () => {
 	const existing = { workers: ["legacy-track"], databases: ["legacy-track"] };
 	const args = ["--name", "legacy-track", "--url", "https://legacy-track.someone.workers.dev"];
 
-	test("by invitation: the sign-in page says so, and the database is not asked", async () => {
+	test("by invitation: the sign-in page says so, and sign-up is not read from the database", async () => {
 		const { by, calls } = await doctor(
 			fresh({
 				...existing,
@@ -221,7 +276,8 @@ describe("sign-up and MCP", () => {
 		);
 		assert.equal(by("sign-up")?.status, "ok");
 		assert.equal(by("first-account"), undefined);
-		assert.equal(calls.filter((call) => call.argv.includes("execute")).length, 0);
+		// The one fixed query still runs, for the migrations table, but only once.
+		assert.equal(calls.filter((call) => call.argv.includes("execute")).length, 1);
 	});
 
 	test("by invitation, read from the database", async () => {

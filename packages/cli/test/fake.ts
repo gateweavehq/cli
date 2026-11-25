@@ -53,6 +53,12 @@ export interface FakeOptions {
 	deployment?: { signUp: "open" | "closed" | null; hasAccounts: boolean };
 	/** Makes the sign-up query fail, as on a database whose tables are missing. */
 	signUpQueryFails?: boolean;
+	/** Whether the database has Wrangler's migrations table. Default: it has. */
+	migrationsTable?: boolean;
+	/** Makes `d1 migrations list` fail. */
+	migrationsListFails?: boolean;
+	/** Makes `git clone` fail. */
+	cloneFails?: boolean;
 }
 
 /**
@@ -69,6 +75,8 @@ export function fakeSystem(options: FakeOptions = {}) {
 		secrets: new Map(
 			Object.entries(options.secrets ?? {}).map(([name, list]) => [name, new Set(list)]),
 		),
+		/** Set when a command created the migrations table, as the real `d1 migrations list` does. */
+		migrationsTableCreated: false,
 	};
 	const secretsOf = (worker: string) =>
 		cloud.secrets.get(worker) ?? new Set(["BETTER_AUTH_SECRET"]);
@@ -129,6 +137,8 @@ export function fakeSystem(options: FakeOptions = {}) {
 				return failed(`✘ [ERROR] Couldn't find a D1 DB with the name or binding "DB"`);
 			}
 			if (second === "migrations" && args[2] === "list") {
+				if (options.migrationsListFails) return failed("✘ [ERROR] Something went wrong.");
+				if (options.migrationsTable === false) cloud.migrationsTableCreated = true;
 				const pending = options.pending ?? [];
 				if (pending.length === 0)
 					return ok("Resource location: remote\n✅ No migrations to apply!\n");
@@ -143,7 +153,13 @@ export function fakeSystem(options: FakeOptions = {}) {
 				return ok(
 					JSON.stringify([
 						{
-							results: [{ sign_up: state.signUp, has_accounts: state.hasAccounts ? 1 : 0 }],
+							results: [
+								{
+									sign_up: state.signUp,
+									has_accounts: state.hasAccounts ? 1 : 0,
+									has_migrations_table: options.migrationsTable === false ? 0 : 1,
+								},
+							],
 							success: true,
 							meta: {},
 						},
@@ -189,6 +205,7 @@ export function fakeSystem(options: FakeOptions = {}) {
 					);
 				}
 				if (args.includes("clone")) {
+					if (options.cloneFails) return failed("fatal: unable to access the repository");
 					const target = args[args.length - 1] ?? "";
 					mkdirSync(target, { recursive: true });
 					writeFileSync(join(target, "wrangler.jsonc"), WRANGLER_CONFIG);

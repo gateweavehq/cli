@@ -40,11 +40,21 @@ const SIGN_UP_DOCS = `${SELF_HOSTING}#who-may-sign-up`;
 
 /**
  * The one query doctor runs against the deployment's own database. It reads two facts the sign-up
- * pages do not show from outside, and it is the same on every run: nothing a person typed goes
- * into it.
+ * pages do not show from outside, and whether Wrangler's migrations table exists: `d1 migrations
+ * list` creates that table when it is missing, so doctor asks first and only lists when it is
+ * there. The query is the same on every run: nothing a person typed goes into it.
  */
 export const SIGN_UP_QUERY =
-	"SELECT (SELECT sign_up FROM deployment WHERE id = 1) AS sign_up, EXISTS (SELECT 1 FROM user WHERE email NOT LIKE '%@agents.invalid') AS has_accounts";
+	"SELECT (SELECT sign_up FROM deployment WHERE id = 1) AS sign_up, EXISTS (SELECT 1 FROM user WHERE email NOT LIKE '%@agents.invalid') AS has_accounts, EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'd1_migrations') AS has_migrations_table";
+
+interface DatabaseRow {
+	sign_up: string | null;
+	has_accounts: number;
+	has_migrations_table: number;
+}
+
+/** What the fixed query found, or why it could not be asked. */
+type DatabaseRead = { row: DatabaseRow } | { error: string };
 
 /** What Track's login page says while its owner has closed sign-up. */
 const CLOSED_SIGN_UP = /takes new accounts by invitation/i;
@@ -174,8 +184,11 @@ export async function doctorTrack(
 		});
 	} else {
 		const checkout = await ensureCheckout(sys, release, names);
-		findings.push(await migrationsFinding(wrangler, pins, checkout, release, record !== undefined));
-		findings.push(...(await signUpFindings(sys, wrangler, pins, checkout, address)));
+		const read = await readDatabase(wrangler, pins, checkout);
+		findings.push(
+			await migrationsFinding(wrangler, pins, checkout, release, record !== undefined, read),
+		);
+		findings.push(...(await signUpFindings(sys, read, address)));
 	}
 
 	findings.push(await mcpFinding(sys, pins, worker, secrets, address));
@@ -231,8 +244,8 @@ async function databaseId(
 
 /**
  * The release's own files in the cache, with the deployment's names in `wrangler.jsonc`, which
- * Wrangler needs to find the migrations and the database. A checkout the deploy made is reused.
- * Null when it cannot be had.
+ * Wrangler needs to find the migrations and the database. A checkout the deploy made is reused,
+ * and its names are written again. Null when it cannot be had.
  */
 async function ensureCheckout(
 	sys: System,
@@ -242,12 +255,32 @@ async function ensureCheckout(
 	const parent = join(cacheDir(sys), "track");
 	const checkout = join(parent, `${release}-${names.worker}`);
 	const config = join(checkout, "wrangler.jsonc");
+	let present = false;
 	try {
 		await access(config);
-		return checkout;
+		present = true;
 	} catch {
 		// Not there yet.
 	}
+	if (!present) {
+		if (!(await cloneRelease(sys, parent, release, checkout))) return null;
+	}
+	// Written again every time: a deploy cut short before it named the checkout leaves Track's own
+	// database name in the file, and Wrangler would then read some other deployment's database.
+	try {
+		await writeFile(config, nameTrack(await readFile(config, "utf8"), names));
+	} catch {
+		return null;
+	}
+	return checkout;
+}
+
+async function cloneRelease(
+	sys: System,
+	parent: string,
+	release: string,
+	checkout: string,
+): Promise<boolean> {
 	await mkdir(parent, { recursive: true });
 	const clone = await sys.run(
 		"git",
@@ -264,9 +297,7 @@ async function ensureCheckout(
 		],
 		{ cwd: parent, env: sys.env },
 	);
-	if (clone.status !== 0) return null;
-	await writeFile(config, nameTrack(await readFile(config, "utf8"), names));
-	return checkout;
+	return clone.status === 0;
 }
 
 async function migrationsFinding(
@@ -275,6 +306,7 @@ async function migrationsFinding(
 	checkout: string | null,
 	release: string,
 	recorded: boolean,
+	read: DatabaseRead,
 ): Promise<Finding> {
 	const unknown = (why: string): Finding => ({
 		id: "migrations",
@@ -283,6 +315,17 @@ async function migrationsFinding(
 		fix: `Run npx wrangler@${pins.wrangler} d1 migrations list DB --remote in a checkout of Track ${release}, or see ${SELF_HOSTING}`,
 	});
 	if (!checkout) return unknown(`Track ${release} could not be fetched.`);
+	if ("error" in read) return unknown(`the database could not be read (${read.error}).`);
+	if (!read.row.has_migrations_table) {
+		// `d1 migrations list` would create the table, which doctor must not do to a database that
+		// may not even be Track's.
+		return {
+			id: "migrations",
+			status: "warn",
+			message: `The database has no migrations table, so no migration of Track ${release} has been applied through Wrangler (or it is not Track's database).`,
+			fix: `Track's own deploy applies them: run \`pnpm run deploy\` in a checkout of the release, or see ${SELF_HOSTING}`,
+		};
+	}
 	const listed = await wrangler(pins, ["d1", "migrations", "list", "DB", "--remote"], checkout);
 	const output = plain(listed.stdout + listed.stderr);
 	if (listed.status !== 0) return unknown(output.trim().split("\n").at(-1) ?? "Wrangler failed.");
@@ -307,12 +350,32 @@ async function migrationsFinding(
 	};
 }
 
-/** Whether sign-up is open or by invitation, and whether any account exists yet. */
-async function signUpFindings(
-	sys: System,
+/** The fixed query, once, for the migrations table check and the sign-up facts. */
+async function readDatabase(
 	wrangler: (pins: Pins, args: string[], cwd?: string) => Promise<RunResult>,
 	pins: Pins,
 	checkout: string | null,
+): Promise<DatabaseRead> {
+	if (!checkout) return { error: "the release's files could not be fetched" };
+	const read = await wrangler(
+		pins,
+		["d1", "execute", "DB", "--remote", "--json", "--command", SIGN_UP_QUERY],
+		checkout,
+	);
+	try {
+		if (read.status !== 0) throw new Error(plain(read.stderr).trim().split("\n").at(-1));
+		const row = json<{ results?: DatabaseRow[] }[]>(read.stdout)[0]?.results?.[0];
+		if (!row) throw new Error("the answer had no row");
+		return { row };
+	} catch (error) {
+		return { error: (error as Error).message };
+	}
+}
+
+/** Whether sign-up is open or by invitation, and whether any account exists yet. */
+async function signUpFindings(
+	sys: System,
+	read: DatabaseRead,
 	address: string | null,
 ): Promise<Finding[]> {
 	const open: Finding = {
@@ -346,21 +409,8 @@ async function signUpFindings(
 			fix: SIGN_UP_DOCS,
 		},
 	];
-	if (!checkout) return unknown("the release's files could not be fetched.");
-	const read = await wrangler(
-		pins,
-		["d1", "execute", "DB", "--remote", "--json", "--command", SIGN_UP_QUERY],
-		checkout,
-	);
-	let row: { sign_up: string | null; has_accounts: number } | undefined;
-	try {
-		if (read.status !== 0) throw new Error(plain(read.stderr).trim().split("\n").at(-1));
-		row = json<{ results?: { sign_up: string | null; has_accounts: number }[] }[]>(read.stdout)[0]
-			?.results?.[0];
-		if (!row) throw new Error("the answer had no row");
-	} catch (error) {
-		return unknown(`the database could not be read (${(error as Error).message}).`);
-	}
+	if ("error" in read) return unknown(`the database could not be read (${read.error}).`);
+	const { row } = read;
 
 	const findings = [row.sign_up === "open" ? open : invitation];
 	if (!row.has_accounts) {
