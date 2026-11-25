@@ -298,6 +298,9 @@ describe("gateweave deploy track", () => {
 		};
 		const first = await deploy(["--name", "gwcli-s1-0ff0ff", "--yes", "--json"], {}, fake);
 		assert.equal(first.code, 8);
+		// The database the failed deploy made is recorded by id, so the next run can tell it apart.
+		const [record] = JSON.parse(readFileSync(recordPath(fake.sys), "utf8")).deployments;
+		assert.equal(record.databaseId, "uuid-gwcli-s1-0ff0ff");
 		fake.output.out = "";
 		// The fake made the Worker before failing, as a deploy cut short after the upload would.
 		const second = await deploy(["--name", "gwcli-s1-0ff0ff", "--yes", "--json"], {}, fake);
@@ -315,6 +318,96 @@ describe("gateweave deploy track", () => {
 		assert.equal(code, 6);
 		assert.deepEqual(
 			fake.calls.filter((call) => !readsOnly(call)),
+			[],
+		);
+	});
+
+	/** A first run, then everything it made removed by hand, as there is no remove command. */
+	async function deployedThenRemoved(name: string) {
+		const fake = fakeSystem();
+		const first = await deploy(["--name", name, "--yes"], {}, fake);
+		assert.equal(first.code, 0);
+		fake.cloud.workers.delete(name);
+		fake.cloud.databases.delete(name);
+		fake.cloud.buckets.delete(`${name}-files`);
+		fake.calls.length = 0;
+		fake.output.out = "";
+		return fake;
+	}
+
+	for (const [what, take] of [
+		[
+			"D1 database",
+			(fake: ReturnType<typeof fakeSystem>, name: string) => {
+				fake.cloud.databases.set(name, "someone-elses-uuid");
+			},
+		],
+		[
+			"R2 bucket",
+			(fake: ReturnType<typeof fakeSystem>, name: string) => {
+				fake.cloud.buckets.add(`${name}-files`);
+			},
+		],
+	] as const) {
+		test(`after a removal by hand, a record does not claim someone else's ${what} of the same name`, async () => {
+			const fake = await deployedThenRemoved("gwcli-s1-5ca1e0");
+			take(fake, "gwcli-s1-5ca1e0");
+			const { code, result } = await deploy(
+				["--name", "gwcli-s1-5ca1e0", "--yes", "--json"],
+				{},
+				fake,
+			);
+			assert.equal(code, 6);
+			assert.equal(result.code, "name-taken");
+			assert.match(result.reason, new RegExp(`the ${what}`));
+			assert.deepEqual(
+				fake.calls.filter((call) => !readsOnly(call)),
+				[],
+			);
+		});
+	}
+
+	test("after a removal by hand with the names still free, it deploys afresh", async () => {
+		const fake = await deployedThenRemoved("gwcli-s1-f4e5h0");
+		const { code, result } = await deploy(
+			["--name", "gwcli-s1-f4e5h0", "--yes", "--json"],
+			{},
+			fake,
+		);
+		assert.equal(code, 0);
+		assert.equal(result.deployedNow, true);
+		assert.match(fake.output.err, /no longer exists; the record is ignored/);
+	});
+
+	test("a D1 database with the recorded name but another id is not claimed", async () => {
+		const fake = fakeSystem();
+		await deploy(["--name", "gwcli-s1-1d1d1d", "--yes"], {}, fake);
+		// The Worker stays; the database was deleted and someone else made one of the same name.
+		fake.cloud.databases.set("gwcli-s1-1d1d1d", "someone-elses-uuid");
+		fake.calls.length = 0;
+		fake.output.out = "";
+		const { code, result } = await deploy(
+			["--name", "gwcli-s1-1d1d1d", "--yes", "--json"],
+			{},
+			fake,
+		);
+		assert.equal(code, 6);
+		assert.match(result.reason, /the D1 database gwcli-s1-1d1d1d/);
+		assert.deepEqual(
+			fake.calls.filter((call) => !readsOnly(call)),
+			[],
+		);
+	});
+
+	test("refuses a taken R2 bucket when Wrangler colours its output", async () => {
+		const { code, result, calls } = await deploy(["--name", "gwcli-s1-c010e0", "--yes", "--json"], {
+			buckets: ["gwcli-s1-c010e0-files"],
+			color: true,
+		});
+		assert.equal(code, 6);
+		assert.match(result.reason, /the R2 bucket gwcli-s1-c010e0-files/);
+		assert.deepEqual(
+			calls.filter((call) => !readsOnly(call)),
 			[],
 		);
 	});

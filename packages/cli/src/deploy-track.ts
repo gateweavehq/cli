@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { type CheckResult, checkFromOutside } from "./checks.ts";
 import { CliError } from "./errors.ts";
 import { cacheDir, npxCli } from "./paths.ts";
@@ -107,7 +108,16 @@ export async function deployTrack(
 		database: options.name,
 		bucket: options.attachments ? `${options.name}-files` : null,
 	};
-	const record = await findRecord(sys, account.id, names.worker);
+	let record = await findRecord(sys, account.id, names.worker);
+	const existing = await lookUp(wrangler, names);
+	if (record?.steps.includes("deployed") && !existing.worker) {
+		// The Worker this tool deployed is gone, so its other resources were removed by hand too,
+		// and whatever now carries their names was made by someone else.
+		say(
+			`The record says this tool deployed ${names.worker}, but that Worker no longer exists; the record is ignored.`,
+		);
+		record = undefined;
+	}
 	if (record) {
 		if (options.release && options.release !== record.release) {
 			throw new CliError(
@@ -130,14 +140,16 @@ export async function deployTrack(
 		}
 	}
 
-	const existing = await lookUp(wrangler, names);
 	const ours = (field: "worker" | "database" | "bucket", name: string | null) =>
 		name !== null && record?.[field] === name;
+	// A database is matched by its id once the record has one: a database deleted by hand and made
+	// again under the same name by someone else is not ours.
+	const databaseOurs =
+		ours("database", names.database) &&
+		(record?.databaseId == null || record.databaseId === existing.databaseId);
 	const taken: string[] = [];
 	if (existing.worker && !ours("worker", names.worker)) taken.push(`the Worker ${names.worker}`);
-	if (existing.databaseId && !ours("database", names.database)) {
-		taken.push(`the D1 database ${names.database}`);
-	}
+	if (existing.databaseId && !databaseOurs) taken.push(`the D1 database ${names.database}`);
 	if (existing.bucket && !ours("bucket", names.bucket)) taken.push(`the R2 bucket ${names.bucket}`);
 	if (taken.length > 0) {
 		throw new CliError(
@@ -205,6 +217,13 @@ export async function deployTrack(
 			},
 		);
 		if (deploy.status !== 0) {
+			// The database was free when the plan was made, so one there now is the one this deploy
+			// made; its id lets the next run tell it from a database made by someone else.
+			databaseId = await lookUp(wrangler, { ...names, bucket: null }).then(
+				(found) => found.databaseId,
+				() => databaseId,
+			);
+			await save();
 			throw new CliError(
 				"deploy-failed",
 				"deploy-failed",
@@ -305,6 +324,11 @@ async function chooseAccount(
 	return only;
 }
 
+/** Wrangler's output without colour codes, so a forced colour cannot hide a name from a match. */
+function plain(text: string): string {
+	return stripVTControlCharacters(text);
+}
+
 /** Whether each planned name is in use in the account. Only lists; changes nothing. */
 async function lookUp(
 	wrangler: (args: string[]) => Promise<RunResult>,
@@ -312,7 +336,7 @@ async function lookUp(
 ): Promise<{ worker: boolean; databaseId: string | null; bucket: boolean }> {
 	const secrets = await wrangler(["secret", "list", "--name", names.worker, "--format", "json"]);
 	const worker = secrets.status === 0;
-	if (!worker && !/Worker ".+" not found/.test(secrets.stderr + secrets.stdout)) {
+	if (!worker && !/Worker ".+" not found/.test(plain(secrets.stderr + secrets.stdout))) {
 		throw new CliError(
 			"requirement",
 			"lookup-failed",
@@ -337,7 +361,7 @@ async function lookUp(
 	let bucket = false;
 	if (names.bucket) {
 		const r2 = await wrangler(["r2", "bucket", "list"]);
-		const output = r2.stderr + r2.stdout;
+		const output = plain(r2.stderr + r2.stdout);
 		if (r2.status !== 0 && /enable R2|\[code: 10042\]/.test(output)) {
 			throw new CliError(
 				"r2-off",
@@ -352,7 +376,8 @@ async function lookUp(
 				`Could not list the account's R2 buckets, so the name ${names.bucket} could not be checked: ${r2.stderr.trim()}`,
 			);
 		}
-		const listed = [...r2.stdout.matchAll(/^name:\s+(\S+)\s*$/gm)].map((match) => match[1]);
+		// There is no JSON form of this list, and Wrangler colours its labels when colour is forced.
+		const listed = [...plain(r2.stdout).matchAll(/^name:\s+(\S+)\s*$/gm)].map((match) => match[1]);
 		bucket = listed.includes(names.bucket);
 	}
 	return { worker, databaseId, bucket };

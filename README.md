@@ -3,8 +3,8 @@
 One command line for [Gateweave](https://gateweave.com): deploy a product into your own Cloudflare
 account, update it, connect products to each other and check a deployment.
 
-**Status: `gateweave deploy track` works: it deploys Track from a release into your own Cloudflare
-account, checks it from outside and says what it created. Nothing else runs yet, and it is not
+**Status: `gateweave deploy track` is written and tested against a fake Wrangler, git and pnpm,
+and not yet rehearsed against a real Cloudflare account. Nothing else runs yet, and it is not
 published, so run it from a checkout (see [Development](#development)).** The repository is
 private until the first version has deployed Track into an empty Cloudflare account and checked it
 from outside.
@@ -52,7 +52,9 @@ from.
 
 It keeps a record of what it made, names and ids only, in `%APPDATA%\gateweave` on Windows and
 `~/.config/gateweave` elsewhere. Run the same command again and it finishes what is left, or only
-checks a deployment that is done.
+checks a deployment that is done. A database counts as its own only while its id matches the record,
+and once the Worker it deployed is gone the record is ignored, so a name someone else took after a
+removal by hand is refused.
 
 With `--json`, stdout holds one object: the result, or `{ "ok": false, "code", "reason" }`.
 

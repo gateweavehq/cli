@@ -35,6 +35,8 @@ export interface FakeOptions {
 	databases?: readonly string[];
 	buckets?: readonly string[];
 	r2?: "on" | "off";
+	/** Colours Wrangler's human output, as it does when FORCE_COLOR is set. */
+	color?: boolean;
 	interactive?: boolean;
 	answer?: boolean;
 	env?: Record<string, string>;
@@ -85,9 +87,13 @@ export function fakeSystem(options: FakeOptions = {}) {
 			if (options.r2 === "off") {
 				return failed("✘ [ERROR] Please enable R2 through the Cloudflare Dashboard. [code: 10042]");
 			}
-			return ok(
-				`Listing buckets...\n${[...cloud.buckets].map((name) => `name:           ${name}\ncreation_date:  2026-11-01T00:00:00.000Z`).join("\n\n")}\n`,
-			);
+			// Wrangler 4.166.0 prints each bucket through formatLabelledValues: the label in white, the
+			// value in gray, aligned on the longest label.
+			const white = (text: string) => (options.color ? `\u001b[37m${text}\u001b[39m` : text);
+			const gray = (text: string) => (options.color ? `\u001b[90m${text}\u001b[39m` : text);
+			const bucket = (name: string) =>
+				`${white("name:")}           ${gray(name)}\n${white("creation_date:")}  ${gray("2026-11-01T00:00:00.000Z")}`;
+			return ok(`Listing buckets...\n${[...cloud.buckets].map(bucket).join("\n\n")}\n`);
 		}
 		return failed(`the fake does not know wrangler ${args.join(" ")}`);
 	}

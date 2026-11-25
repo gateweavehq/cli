@@ -1,9 +1,12 @@
 node_modules
 dist
 coverage
+.wrangler
 *.tsbuildinfo
 
 # Local secrets
+.dev.vars
+.dev.vars.*
 .env
 .env.*
 
