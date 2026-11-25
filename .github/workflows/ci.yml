@@ -37,3 +37,5 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      - name: Pack a release as it would be published
+        run: pnpm --filter gateweave release --dry-run

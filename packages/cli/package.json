@@ -1,5 +1,5 @@
 {
-	"name": "@gateweave/cli",
+	"name": "gateweave",
 	"version": "0.0.0",
 	"private": true,
 	"description": "Deploy Gateweave products into your own Cloudflare account.",
@@ -16,6 +16,7 @@
 	],
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
+		"release": "node scripts/release.mjs",
 		"typecheck": "tsc -p tsconfig.json",
 		"test": "node --test \"test/**/*.test.ts\""
 	},
