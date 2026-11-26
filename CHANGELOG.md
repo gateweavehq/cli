@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to the Gateweave CLI, newest first. The format follows
+Notable changes to the Gateweave CLI, newest first. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org). Until 1.0, any release may change how things work:
 read its entry before moving to it.
@@ -10,53 +10,67 @@ you: change the address to move to a new version. See [Install](README.md#instal
 
 ## [0.1.0] - 2026-11-26
 
-The first release. It has two commands, both for Gateweave Track. The tests fake Wrangler, git
-and pnpm. Both commands were also rehearsed in a real, empty Cloudflare account, and `deploy
-track` was rehearsed from the packed tarball too. It is still early, so if you can, deploy first
-into an account that holds nothing else.
+The first release, with two commands for Gateweave Track. The tests fake Wrangler, git and pnpm.
+Both commands were also rehearsed in a real, empty Cloudflare account, `deploy track` also from
+the packed tarball. It is still early, so if you can, deploy first into an account that holds
+nothing else. The README describes each command in full.
 
 ### Added
 
 - `gateweave deploy track` puts Track into your own Cloudflare account. It needs Node 22 or newer
-  with npm, git, and Wrangler signed in (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN`). It
-  installs nothing globally and writes nothing into the folder you run it from.
-  - It first looks, changing nothing: the account (with several, it stops and lists them; choose
-    one with `--account` or `CLOUDFLARE_ACCOUNT_ID`), whether R2 is on, Track's newest release (or
-    the one you name with `--release`), and that no Worker, D1 database or R2 bucket of the
-    planned names exists. A name already in use that it did not make stops it.
-  - It then shows the account, the release and everything it will create, and waits for a yes:
-    the Worker and D1 database (`--name`, default `gateweave-track`), the R2 bucket
-    (`<name>-files`, left out with `--no-attachments`), the Durable Objects `WorkspaceDO` and
-    `RateLimiter`, and the secret `BETTER_AUTH_SECRET` by name. `--yes` answers for you; without a
-    terminal and without `--yes` it stops before creating anything.
-  - It runs Track's own `pnpm run deploy` at the release tag, which creates the resources, sets
-    `BETTER_AUTH_SECRET` to a value nobody sees, and applies the migrations.
-  - It checks the address from outside for up to two minutes, then says what it created. Open the
-    address and create the first account, which owns the server. MCP stays off until
-    `BETTER_AUTH_URL` is set.
-  - It keeps a record of what it made (names and ids, no secrets) in `%APPDATA%\gateweave` on
-    Windows and `~/.config/gateweave` elsewhere. Run the same command again and it finishes what
-    is left, or only checks a deployment that is done. It never binds to, changes or deletes an
-    existing database, bucket or Worker it did not create.
-  - `--json` prints one object, or `{ "ok": false, "code", "reason" }`. Exit codes 0 to 9 are
-    listed in the README.
-- `gateweave doctor track` says what is wrong with a Track deployment, in words. Each finding is
-  `ok`, `warn` or `fail` with one sentence and the fix: the Worker, each required secret, the
-  release against Track's newest, migrations not applied, whether sign-up is open, whether a first
-  account exists, whether MCP is on, and the same checks from outside that `deploy track` ends
-  with. It changes nothing in your Cloudflare account and never prints a secret's value.
-  It works from the record `deploy track` keeps, or, for a deployment made another way, from
-  `--name` and `--url`. It exits 1 when any finding is a `fail`. `--json` prints an array of
-  `{ "id", "status", "message", "fix" }`.
-- `gateweave --version` prints the version and nothing else.
-- Install without npm and without cloning: run the tarball from its address with `npx --yes` and
-  Node 22 or newer, as the README's Install section shows. The release folder has a `SHA256SUMS`,
-  so a download checks with `sha256sum -c SHA256SUMS`. `https://pkg.gateweave.com/cli/latest.json`
-  names the newest release with its address, SHA-256, npm `integrity` and the commit it was built
-  from. A release never changes once it is there.
+  with npm, git, and Wrangler signed in (`npx wrangler login`, or `CLOUDFLARE_API_TOKEN`).
+  - It first reads, changing nothing in Cloudflare: the account (with several, it lists them and
+    stops; choose one with `--account` or `CLOUDFLARE_ACCOUNT_ID`), Track's newest release (or
+    `--release`), whether R2 is on when attachments are wanted, and whether a Worker, D1 database
+    or R2 bucket of the planned names already exists. A name in use that it has no record of
+    making stops it.
+  - It shows the plan and asks before creating anything. The plan lists:
+    - the account and the release
+    - the Worker and the D1 database, named by `--name` (default `gateweave-track`)
+    - the R2 bucket `<name>-files`, unless you pass `--no-attachments`
+    - the Durable Objects the release declares
+    - the secret `BETTER_AUTH_SECRET`, by name only
+
+    `--yes` answers for you. With no terminal and no `--yes`, it exits 7 instead.
+  - It then runs Track's own `pnpm run deploy` at that release tag. That script creates the
+    resources, sets `BETTER_AUTH_SECRET` and applies the migrations.
+  - It checks the address from outside, retrying for about two minutes. If every check passes, it
+    says what it made and what to do next: create the first account, which owns the server, and
+    set `BETTER_AUTH_URL` for MCP. If a check fails, it exits 9.
+  - It keeps a record of names, ids and progress in `deployments.json`, with no secrets in it.
+    The file is under `%APPDATA%\gateweave` on Windows, and under `$XDG_CONFIG_HOME/gateweave` or
+    `~/.config/gateweave` elsewhere.
+  - Run the same command again to retry an unfinished deploy at the recorded release. A finished
+    deploy is only checked.
+  - `--json` prints one object, or `{ "ok": false, "code", "reason" }` on failure. The README lists
+    the exit codes 0 to 9.
+- `gateweave doctor track` says what is wrong with a Track deployment, in words.
+  - Each finding has a status (`ok`, `warn` or `fail`), a message and, where there is one, the
+    fix.
+  - It looks at:
+    - the Worker and the required secrets
+    - the release, against Track's newest
+    - migrations not yet applied
+    - sign-up, and whether a first account exists
+    - signs that MCP is on
+    - given an address, the same outside checks that `deploy track` ends with
+  - It changes nothing in Cloudflare and uses secrets' names only.
+  - It reads the record `deploy track` keeps. For a deployment made another way, pass `--name` and
+    `--url`.
+  - It exits 1 when any finding is a `fail`.
+  - `--json` prints an array of `{ "id", "status", "message", "fix" }`, with `fix` null when there
+    is none.
+- `gateweave --version` prints the version.
+- Install without cloning. With Node 22 or newer and npm, run the release's tarball address with
+  `npx --yes`, as the README's Install section shows.
+  - Each release folder has a `SHA256SUMS` file to check with `sha256sum -c`.
+  - `https://pkg.gateweave.com/cli/latest.json` names the newest stable release. It gives the
+    tarball address, the SHA-256, npm's `integrity`, the commit the release was built from, and
+    when it was published.
+  - A release never changes once it is there.
 
 ### Security
 
-- The account printed by `deploy track --json` holds only its `id` and `name`, not the rest of
-  Wrangler's account record, which can hold an email address and is often pasted into issues.
-  The name itself can still hold one: Cloudflare names a new account `<email>'s Account`.
+- `deploy track --json` prints only the account's `id` and `name`. It leaves out the rest of
+  Wrangler's account record, which can hold an email address. The name is kept as Wrangler returns
+  it, so an address in it still shows. Cloudflare's default name, `<email>'s Account`, holds one.
