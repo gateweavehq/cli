@@ -5,7 +5,7 @@ account and check the deployment.
 
 **Status: early.** `gateweave deploy track` and `gateweave doctor track` are tested against a fake
 Wrangler, git and pnpm, and were rehearsed in a real, empty Cloudflare account. Nothing else exists
-yet. Run it with `npx gateweave` (see [Install](#install)).
+yet. Each release is a tarball you run with `npx` (see [Install](#install)); it is not on npm yet.
 
 ## Commands
 
@@ -105,15 +105,8 @@ codes 3 and 4 above, and a usage error with 2.
 
 ## Install
 
-Run it from npm, with Node 22 or newer and nothing else installed:
-
-```sh
-npx --yes gateweave --version
-```
-
-Each release is published to npm from a `v<version>` tag by a GitHub workflow that npm trusts, so no
-npm token exists and the package carries provenance. The same tarball is also on
-`pkg.gateweave.com`, the mirror, which `npx` runs from its address:
+The package isn't on npm yet. Each release is a tarball on `pkg.gateweave.com`, which `npx` runs
+from its address, with Node 22 or newer and nothing else installed:
 
 ```sh
 npx --yes https://pkg.gateweave.com/cli/<version>/gateweave-<version>.tgz --version
@@ -122,8 +115,8 @@ npx --yes https://pkg.gateweave.com/cli/<version>/gateweave-<version>.tgz --vers
 [`cli/latest.json`](https://pkg.gateweave.com/cli/latest.json) names the newest release with its
 address, SHA-256, the `integrity` that npm keeps in a lockfile and the commit it was built from. Each
 release's folder has a `SHA256SUMS` too, so a download checks with `sha256sum -c SHA256SUMS`. A
-release never changes once it is there. The mirror isn't a registry, so `npm update`,
-Dependabot and Renovate don't see a new version there: change the address to move to it.
+release never changes once it is there. Since it doesn't come from a registry, `npm update`,
+Dependabot and Renovate don't see a new version: change the address to move to it.
 
 ## Principles
 
