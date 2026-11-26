@@ -22,8 +22,8 @@ nothing else. The README describes each command in full.
   - It first reads, changing nothing in Cloudflare: the account (with several, it lists them and
     stops; choose one with `--account` or `CLOUDFLARE_ACCOUNT_ID`), Track's newest release (or
     `--release`), whether R2 is on when attachments are wanted, and whether a Worker, D1 database
-    or R2 bucket of the planned names already exists. A name in use that it has no record of
-    making stops it.
+    or R2 bucket of the planned names already exists. An existing one stops it, unless its
+    deployment record names it; for the D1 database, a recorded database id must match too.
   - It shows the plan and asks before creating anything. The plan lists:
     - the account and the release
     - the Worker and the D1 database, named by `--name` (default `gateweave-track`)
@@ -31,7 +31,8 @@ nothing else. The README describes each command in full.
     - the Durable Objects the release declares
     - the secret `BETTER_AUTH_SECRET`, by name only
 
-    `--yes` answers for you. With no terminal and no `--yes`, it exits 7 instead.
+    `--yes` answers for you. If it needs to deploy and has neither a terminal nor `--yes`, it
+    exits 7.
   - It then runs Track's own `pnpm run deploy` at that release tag. That script creates the
     resources, sets `BETTER_AUTH_SECRET` and applies the migrations.
   - It checks the address from outside, retrying for about two minutes. If every check passes, it
@@ -58,8 +59,8 @@ nothing else. The README describes each command in full.
   - It reads the record `deploy track` keeps. For a deployment made another way, pass `--name` and
     `--url`.
   - It exits 1 when any finding is a `fail`.
-  - `--json` prints an array of `{ "id", "status", "message", "fix" }`, with `fix` null when there
-    is none.
+  - With `--json`, a completed check prints an array of `{ "id", "status", "message", "fix" }`,
+    with `fix` null when there is none. A command error prints `{ "ok": false, "code", "reason" }`.
 - `gateweave --version` prints the version.
 - Install without cloning. With Node 22 or newer and npm, run the release's tarball address with
   `npx --yes`, as the README's Install section shows.
@@ -71,6 +72,7 @@ nothing else. The README describes each command in full.
 
 ### Security
 
-- `deploy track --json` prints only the account's `id` and `name`. It leaves out the rest of
-  Wrangler's account record, which can hold an email address. The name is kept as Wrangler returns
-  it, so an address in it still shows. Cloudflare's default name, `<email>'s Account`, holds one.
+- In the `deploy track --json` result, `account` holds only the account's `id` and `name`. It
+  leaves out the rest of Wrangler's account record, which can hold an email address. The name is
+  kept as Wrangler returns it, so an address in it still shows. Cloudflare's default name,
+  `<email>'s Account`, holds one.
