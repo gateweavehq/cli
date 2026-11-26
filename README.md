@@ -3,10 +3,9 @@
 One command line for [Gateweave](https://gateweave.com): deploy Track into your own Cloudflare
 account and check the deployment.
 
-**Status: early.** `gateweave deploy track` and `gateweave doctor track` are written and tested
-against a fake Wrangler, git and pnpm, and have not yet been rehearsed against a real Cloudflare
-account. Nothing else exists yet. Each release is a tarball you run with `npx` (see
-[Install](#install)); it is not on npm.
+**Status: early.** `gateweave deploy track` and `gateweave doctor track` are tested against a fake
+Wrangler, git and pnpm, and were rehearsed in a real, empty Cloudflare account. Nothing else exists
+yet. Each release is a tarball you run with `npx` (see [Install](#install)); it is not on npm.
 
 ## Commands
 
