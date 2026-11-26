@@ -2,9 +2,11 @@ name: Publish
 
 # Publishes the gateweave package to npm when a `v<version>` tag is pushed. npm trusts this
 # workflow's OIDC token (trusted publishing), so no npm token is stored anywhere, and the package
-# gets provenance. Only admins can create those tags, and the tag must point at a commit on main
-# whose packages/cli/package.json has that version. The tarball for pkg.gateweave.com is made by
-# `pnpm --filter gateweave release` and holds the same files; that mirror is uploaded by hand.
+# gets provenance. Who may push those tags is limited by a `v*` tag ruleset on the repository, and
+# the tag must point at a commit on main whose packages/cli/package.json has that version. The
+# tarball for pkg.gateweave.com is made by `pnpm --filter gateweave release` and holds the same
+# files; that mirror is uploaded by hand. If the mirror already has this version, the packed bytes
+# must match its SHA256SUMS, or nothing is published: a version on npm can never be replaced.
 on:
   push:
     tags: ["v*"]
@@ -55,6 +57,20 @@ jobs:
         run: |
           npm --version
           pnpm pack --pack-destination "$RUNNER_TEMP"
+          tgz=$(ls "$RUNNER_TEMP"/gateweave-*.tgz)
+          version=${TAG#v}
+          mine=$(sha256sum "$tgz" | cut -d' ' -f1)
+          code=$(curl -sS -o "$RUNNER_TEMP/SHA256SUMS" -w '%{http_code}' "https://pkg.gateweave.com/cli/$version/SHA256SUMS")
+          case "$code" in
+            200)
+              theirs=$(awk -v f="gateweave-$version.tgz" '$2 == f { print $1 }' "$RUNNER_TEMP/SHA256SUMS")
+              if [ "$theirs" != "$mine" ]; then
+                echo "::error::The mirror has $version with sha256 '$theirs', this build is $mine. Release a new version instead."
+                exit 1
+              fi ;;
+            404) echo "The mirror has no $version yet." ;;
+            *) echo "::error::The mirror answered $code"; exit 1 ;;
+          esac
           # A prerelease must not become what `npx gateweave` runs.
           case "$TAG" in *-*) channel=next ;; *) channel=latest ;; esac
-          npm publish "$RUNNER_TEMP"/gateweave-*.tgz --access public --tag "$channel"
+          npm publish "$tgz" --access public --tag "$channel"
