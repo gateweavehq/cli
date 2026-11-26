@@ -4,9 +4,13 @@ name: Publish
 # workflow's OIDC token (trusted publishing), so no npm token is stored anywhere, and the package
 # gets provenance. Who may push those tags is limited by a `v*` tag ruleset on the repository, and
 # the tag must point at a commit on main whose packages/cli/package.json has that version. The
-# tarball for pkg.gateweave.com is made by `pnpm --filter gateweave release` and holds the same
-# files; that mirror is uploaded by hand. If the mirror already has this version, the packed bytes
-# must match its SHA256SUMS, or nothing is published: a version on npm can never be replaced.
+# job runs in the `npm` environment, whose deployment policy allows only `v*` tags, and npm's
+# trusted publisher for this package must name that environment (`npm`) as well as this workflow:
+# a run of this workflow from any branch then has no environment to present, and cannot publish.
+# The tarball for pkg.gateweave.com is made by `pnpm --filter gateweave release` and holds the
+# same files; that mirror is uploaded by hand. If the mirror already has this version, the packed
+# bytes must match its SHA256SUMS (or the tarball itself, when SHA256SUMS is missing), or nothing
+# is published: a version on npm can never be replaced.
 on:
   push:
     tags: ["v*"]
@@ -19,6 +23,7 @@ jobs:
   publish:
     if: github.repository == 'gateweavehq/cli'
     runs-on: ubuntu-latest
+    environment: npm
     concurrency: publish
     steps:
       - uses: actions/checkout@v7
@@ -68,9 +73,26 @@ jobs:
                 echo "::error::The mirror has $version with sha256 '$theirs', this build is $mine. Release a new version instead."
                 exit 1
               fi ;;
-            404) echo "The mirror has no $version yet." ;;
+            404)
+              # The mirror's upload writes the tarball before SHA256SUMS, so a run that stopped
+              # in between leaves a tarball whose digest is not recorded. Look at it directly.
+              code=$(curl -sS -o "$RUNNER_TEMP/mirror.tgz" -w '%{http_code}' "https://pkg.gateweave.com/cli/$version/gateweave-$version.tgz")
+              case "$code" in
+                200)
+                  theirs=$(sha256sum "$RUNNER_TEMP/mirror.tgz" | cut -d' ' -f1)
+                  if [ "$theirs" != "$mine" ]; then
+                    echo "::error::The mirror has a tarball for $version with sha256 '$theirs', this build is $mine. Release a new version instead."
+                    exit 1
+                  fi ;;
+                404) echo "The mirror has nothing for $version yet." ;;
+                *) echo "::error::The mirror answered $code for the tarball"; exit 1 ;;
+              esac ;;
             *) echo "::error::The mirror answered $code"; exit 1 ;;
           esac
-          # A prerelease must not become what `npx gateweave` runs.
-          case "$TAG" in *-*) channel=next ;; *) channel=latest ;; esac
-          npm publish "$tgz" --access public --tag "$channel"
+          # A prerelease must not become what `npx gateweave` runs, so it gets the next tag. A
+          # stable release gets no --tag: npm then applies latest, and refuses it when a higher
+          # stable version is already published.
+          case "$TAG" in
+            *-*) npm publish "$tgz" --access public --tag next ;;
+            *) npm publish "$tgz" --access public ;;
+          esac

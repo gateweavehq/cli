@@ -3,6 +3,8 @@
 // same tarball to npm from a tag):
 //
 //   pnpm --filter gateweave release --dry-run   builds, packs and checks; uploads nothing
+//   ... --dry-run --copy-to <dir>               and leaves a copy of the checked tarball in <dir>,
+//                                               so CI can run `npm publish --dry-run` on those bytes
 //   pnpm --filter gateweave release             and uploads, from a clean commit on main
 //
 // It builds dist/ afresh and packs the package as npm would publish it. It checks what the tarball
@@ -19,7 +21,15 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -282,6 +292,9 @@ function npxCli() {
 
 async function main() {
 	const dryRun = process.argv.includes("--dry-run");
+	const copyFlag = process.argv.indexOf("--copy-to");
+	const copyTo = copyFlag === -1 ? undefined : process.argv[copyFlag + 1];
+	if (copyFlag !== -1 && !copyTo) stop("--copy-to needs a folder.");
 	const here = dirname(fileURLToPath(import.meta.url));
 	const packageDir = resolve(here, "..");
 	const root = resolve(packageDir, "../..");
@@ -365,6 +378,13 @@ async function main() {
 		const sums = Buffer.from(sha256sums([[tarballName(version), sum]]));
 		writeFileSync(join(work, "SHA256SUMS"), sums);
 		console.log(`Packed ${files.size} files, ${bytes.length} bytes, sha256 ${sum}.`);
+		if (copyTo) {
+			// The same bytes that were checked and hashed above, for a caller's own checks.
+			mkdirSync(resolve(copyTo), { recursive: true });
+			const copy = join(resolve(copyTo), tarballName(version));
+			copyFileSync(tarball, copy);
+			console.log(`Copied the tarball to ${copy}.`);
+		}
 		if (dryRun) {
 			console.log(`Dry run: nothing uploaded. It would go to ${BASE}/${keys.tarball}.`);
 			return;
