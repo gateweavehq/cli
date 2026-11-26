@@ -1,5 +1,6 @@
 // Puts a release of the command line on pkg.gateweave.com, Gateweave's own place for its packages,
-// an R2 bucket, until the package goes to npm:
+// an R2 bucket, kept as the mirror of the npm package (.github/workflows/publish.yml publishes the
+// same tarball to npm from a tag):
 //
 //   pnpm --filter gateweave release --dry-run   builds, packs and checks; uploads nothing
 //   pnpm --filter gateweave release             and uploads, from a clean commit on main
@@ -28,6 +29,7 @@ export const BASE = "https://pkg.gateweave.com";
 const BUCKET = "gateweave-pkg";
 const FOLDER = "cli";
 const NAME = "gateweave";
+const REPOSITORY = "git+https://github.com/gateweavehq/cli.git";
 // Pinned, because the upload runs as a person with write access to the bucket.
 const WRANGLER = "wrangler@4.160.0";
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -125,8 +127,12 @@ export function checkPackage(files, version) {
 	if (at(manifest, "version") !== version) problems.push(`package.json isn't version ${version}.`);
 	if (at(manifest, "license") !== "AGPL-3.0-only")
 		problems.push("package.json isn't AGPL-3.0-only.");
-	if (at(manifest, "private") !== true) {
-		problems.push("package.json isn't private, so a stray `npm publish` would reach npm.");
+	if (at(manifest, "private") === true) {
+		problems.push("package.json is private, so npm would refuse to publish it.");
+	}
+	// npm's provenance statement fails when the repository named here isn't the one that built it.
+	if (at(manifest, "repository", "url") !== REPOSITORY) {
+		problems.push(`package.json's repository isn't ${REPOSITORY}.`);
 	}
 	for (const target of leaves(at(manifest, "bin"))) {
 		if (!files.has(`package/${target.replace(/^\.\//, "")}`)) {

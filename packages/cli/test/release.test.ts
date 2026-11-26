@@ -42,7 +42,7 @@ function packed(changes: Record<string, string | undefined> = {}) {
 	const manifest = {
 		name: "gateweave",
 		version: "1.2.3",
-		private: true,
+		repository: { type: "git", url: "git+https://github.com/gateweavehq/cli.git" },
 		license: "AGPL-3.0-only",
 		bin: { gateweave: "dist/bin.js" },
 		dependencies: { "jsonc-parser": "3.3.1" },
@@ -95,10 +95,11 @@ test("checkPackage finds what shouldn't be there, and what should be and isn't",
 	]);
 });
 
-test("checkPackage wants the version, a runnable command, a private package and real dependencies", () => {
+test("checkPackage wants the version, a runnable command, a public package from this repository and real dependencies", () => {
 	const manifest = {
 		name: "gateweave",
 		version: "1.2.4",
+		private: true,
 		license: "AGPL-3.0-only",
 		bin: { gateweave: "dist/missing.js" },
 		dependencies: { shared: "workspace:*", "jsonc-parser": "3.3.1" },
@@ -113,7 +114,8 @@ test("checkPackage wants the version, a runnable command, a private package and 
 	assert.deepEqual(problems, [
 		"dist/bin.js doesn't start with a shebang, so it won't run as a command.",
 		"package.json isn't version 1.2.3.",
-		"package.json isn't private, so a stray `npm publish` would reach npm.",
+		"package.json is private, so npm would refuse to publish it.",
+		"package.json's repository isn't git+https://github.com/gateweavehq/cli.git.",
 		"package.json's bin names dist/missing.js, which the package doesn't hold.",
 		"dependencies has shared as workspace:*, which only this workspace has.",
 	]);

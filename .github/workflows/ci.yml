@@ -39,3 +39,15 @@ jobs:
         run: pnpm build
       - name: Pack a release as it would be published
         run: pnpm --filter gateweave release --dry-run
+      # What npm would publish must be what the tarball holds. A dry run needs no login.
+      - name: Dry-run the npm publish
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          pnpm --filter gateweave pack --pack-destination "$RUNNER_TEMP"
+          tarball=$(ls "$RUNNER_TEMP"/gateweave-*.tgz)
+          tar -tzf "$tarball" | sed 's#^package/##' | sort > "$RUNNER_TEMP/packed.txt"
+          npm publish "$tarball" --access public --dry-run --json > "$RUNNER_TEMP/dry.json"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const p=r.files?r:Object.values(r)[0];console.log(p.files.map((f)=>f.path).sort().join("\n"))' "$RUNNER_TEMP/dry.json" > "$RUNNER_TEMP/npm.txt"
+          cat "$RUNNER_TEMP/npm.txt"
+          diff "$RUNNER_TEMP/packed.txt" "$RUNNER_TEMP/npm.txt"

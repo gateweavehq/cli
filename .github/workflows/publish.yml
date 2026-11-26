@@ -1,0 +1,60 @@
+name: Publish
+
+# Publishes the gateweave package to npm when a `v<version>` tag is pushed. npm trusts this
+# workflow's OIDC token (trusted publishing), so no npm token is stored anywhere, and the package
+# gets provenance. Only admins can create those tags, and the tag must point at a commit on main
+# whose packages/cli/package.json has that version. The tarball for pkg.gateweave.com is made by
+# `pnpm --filter gateweave release` and holds the same files; that mirror is uploaded by hand.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.repository == 'gateweavehq/cli'
+    runs-on: ubuntu-latest
+    concurrency: publish
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$TAG does not point at a commit on main"
+            exit 1
+          fi
+          version=$(node -p "require('./packages/cli/package.json').version")
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::$TAG does not match packages/cli/package.json ($version)"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter gateweave build
+      # pnpm pack turns workspace: and catalog: references into versions. npm publishes, because
+      # trusted publishing needs npm 11.5.1 or later.
+      - name: Publish
+        working-directory: packages/cli
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          npm --version
+          pnpm pack --pack-destination "$RUNNER_TEMP"
+          # A prerelease must not become what `npx gateweave` runs.
+          case "$TAG" in *-*) channel=next ;; *) channel=latest ;; esac
+          npm publish "$RUNNER_TEMP"/gateweave-*.tgz --access public --tag "$channel"
