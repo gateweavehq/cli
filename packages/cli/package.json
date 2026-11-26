@@ -1,9 +1,17 @@
 {
 	"name": "gateweave",
 	"version": "0.1.0",
-	"private": true,
 	"description": "Deploy Gateweave products into your own Cloudflare account.",
 	"license": "AGPL-3.0-only",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/gateweavehq/cli.git",
+		"directory": "packages/cli"
+	},
+	"homepage": "https://github.com/gateweavehq/cli#readme",
+	"publishConfig": {
+		"access": "public"
+	},
 	"type": "module",
 	"engines": {
 		"node": ">=22"

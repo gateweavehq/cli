@@ -1,7 +1,10 @@
 // Puts a release of the command line on pkg.gateweave.com, Gateweave's own place for its packages,
-// an R2 bucket, until the package goes to npm:
+// an R2 bucket, kept as the mirror of the npm package (.github/workflows/publish.yml publishes the
+// same tarball to npm from a tag):
 //
 //   pnpm --filter gateweave release --dry-run   builds, packs and checks; uploads nothing
+//   ... --dry-run --copy-to <dir>               and leaves a copy of the checked tarball in <dir>,
+//                                               so CI can run `npm publish --dry-run` on those bytes
 //   pnpm --filter gateweave release             and uploads, from a clean commit on main
 //
 // It builds dist/ afresh and packs the package as npm would publish it. It checks what the tarball
@@ -18,7 +21,15 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +39,7 @@ export const BASE = "https://pkg.gateweave.com";
 const BUCKET = "gateweave-pkg";
 const FOLDER = "cli";
 const NAME = "gateweave";
+const REPOSITORY = "git+https://github.com/gateweavehq/cli.git";
 // Pinned, because the upload runs as a person with write access to the bucket.
 const WRANGLER = "wrangler@4.160.0";
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -125,8 +137,12 @@ export function checkPackage(files, version) {
 	if (at(manifest, "version") !== version) problems.push(`package.json isn't version ${version}.`);
 	if (at(manifest, "license") !== "AGPL-3.0-only")
 		problems.push("package.json isn't AGPL-3.0-only.");
-	if (at(manifest, "private") !== true) {
-		problems.push("package.json isn't private, so a stray `npm publish` would reach npm.");
+	if (at(manifest, "private") === true) {
+		problems.push("package.json is private, so npm would refuse to publish it.");
+	}
+	// npm's provenance statement fails when the repository named here isn't the one that built it.
+	if (at(manifest, "repository", "url") !== REPOSITORY) {
+		problems.push(`package.json's repository isn't ${REPOSITORY}.`);
 	}
 	for (const target of leaves(at(manifest, "bin"))) {
 		if (!files.has(`package/${target.replace(/^\.\//, "")}`)) {
@@ -276,6 +292,9 @@ function npxCli() {
 
 async function main() {
 	const dryRun = process.argv.includes("--dry-run");
+	const copyFlag = process.argv.indexOf("--copy-to");
+	const copyTo = copyFlag === -1 ? undefined : process.argv[copyFlag + 1];
+	if (copyFlag !== -1 && !copyTo) stop("--copy-to needs a folder.");
 	const here = dirname(fileURLToPath(import.meta.url));
 	const packageDir = resolve(here, "..");
 	const root = resolve(packageDir, "../..");
@@ -359,6 +378,13 @@ async function main() {
 		const sums = Buffer.from(sha256sums([[tarballName(version), sum]]));
 		writeFileSync(join(work, "SHA256SUMS"), sums);
 		console.log(`Packed ${files.size} files, ${bytes.length} bytes, sha256 ${sum}.`);
+		if (copyTo) {
+			// The same bytes that were checked and hashed above, for a caller's own checks.
+			mkdirSync(resolve(copyTo), { recursive: true });
+			const copy = join(resolve(copyTo), tarballName(version));
+			copyFileSync(tarball, copy);
+			console.log(`Copied the tarball to ${copy}.`);
+		}
 		if (dryRun) {
 			console.log(`Dry run: nothing uploaded. It would go to ${BASE}/${keys.tarball}.`);
 			return;
