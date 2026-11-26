@@ -10,9 +10,10 @@ you: change the address to move to a new version. See [Install](README.md#instal
 
 ## [0.1.0] - 2026-11-26
 
-The first release. It has two commands, both for Gateweave Track. They are written and tested
-against a fake Wrangler, git and pnpm; neither has yet been rehearsed against a real Cloudflare
-account, so run the first deploy in an account you can spare.
+The first release. It has two commands, both for Gateweave Track. The tests fake Wrangler, git
+and pnpm. Both commands were also rehearsed in a real, empty Cloudflare account, and `deploy
+track` was rehearsed from the packed tarball too. It is still early, so if you can, deploy first
+into an account that holds nothing else.
 
 ### Added
 
@@ -43,7 +44,7 @@ account, so run the first deploy in an account you can spare.
   `ok`, `warn` or `fail` with one sentence and the fix: the Worker, each required secret, the
   release against Track's newest, migrations not applied, whether sign-up is open, whether a first
   account exists, whether MCP is on, and the same checks from outside that `deploy track` ends
-  with. It reads and changes nothing in your Cloudflare account and never prints a secret's value.
+  with. It changes nothing in your Cloudflare account and never prints a secret's value.
   It works from the record `deploy track` keeps, or, for a deployment made another way, from
   `--name` and `--url`. It exits 1 when any finding is a `fail`. `--json` prints an array of
   `{ "id", "status", "message", "fix" }`.
@@ -58,3 +59,4 @@ account, so run the first deploy in an account you can spare.
 
 - The account printed by `deploy track --json` holds only its `id` and `name`, not the rest of
   Wrangler's account record, which can hold an email address and is often pasted into issues.
+  The name itself can still hold one: Cloudflare names a new account `<email>'s Account`.
