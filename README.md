@@ -45,9 +45,11 @@ from.
 
 It keeps a record of what it made, names and ids only, in `%APPDATA%\gateweave` on Windows and
 `~/.config/gateweave` elsewhere. Run the same command again and it finishes what is left, or only
-checks a deployment that is done. A database counts as its own only while its id matches the record,
-and once the Worker it deployed is gone the record is ignored, so a name someone else took after a
-removal by hand is refused.
+checks a deployment that is done. A resource counts as its own only after the record proves this
+tool created it: the Worker and bucket must have been seen after their names were free, and the
+database's id must match the record. Once the Worker it deployed is gone the record is ignored.
+If a run stopped before creation was confirmed and someone else later used the name, the second
+run stops with the name-in-use error and changes nothing.
 
 With `--json`, stdout holds one object: the result, or `{ "ok": false, "code", "reason" }`.
 In the result, `account` is `{ "id", "name" }` and nothing else of Wrangler's account record.

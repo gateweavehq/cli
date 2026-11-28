@@ -16,9 +16,13 @@ export interface DeploymentRecord {
 	accountName: string;
 	release: string;
 	worker: string;
+	/** True once the Worker was seen after the plan showed its name free. */
+	workerCreated: boolean;
 	database: string;
 	databaseId: string | null;
 	bucket: string | null;
+	/** True once the bucket was seen after the plan showed its name free. */
+	bucketCreated: boolean;
 	address: string | null;
 	steps: Step[];
 	updatedAt: string;
@@ -30,9 +34,11 @@ export const RECORD_FIELDS: readonly (keyof DeploymentRecord)[] = [
 	"accountName",
 	"release",
 	"worker",
+	"workerCreated",
 	"database",
 	"databaseId",
 	"bucket",
+	"bucketCreated",
 	"address",
 	"steps",
 	"updatedAt",

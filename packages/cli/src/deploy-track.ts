@@ -140,13 +140,18 @@ export async function deployTrack(
 		}
 	}
 
-	const ours = (field: "worker" | "database" | "bucket", name: string | null) =>
-		name !== null && record?.[field] === name;
-	// A database is matched by its id once the record has one: a database deleted by hand and made
-	// again under the same name by someone else is not ours.
-	const databaseOurs =
-		ours("database", names.database) &&
-		(record?.databaseId == null || record.databaseId === existing.databaseId);
+	const finishedDeploy = record?.steps.includes("deployed") === true;
+	const ours = (field: "worker" | "database" | "bucket", name: string | null) => {
+		if (name === null || record?.[field] !== name) return false;
+		// Records written before a deploy reached a resource do not claim it: an interrupted run
+		// leaves only an intention, and someone else may have made the resource since.
+		if (field === "worker") return record.workerCreated === true || finishedDeploy;
+		if (field === "bucket") return record.bucketCreated === true || finishedDeploy;
+		return record.databaseId !== null && record.databaseId === existing.databaseId;
+	};
+	// A database is matched by its id: one deleted by hand and made again under the same name by
+	// someone else is not ours.
+	const databaseOurs = ours("database", names.database);
 	const taken: string[] = [];
 	if (existing.worker && !ours("worker", names.worker)) taken.push(`the Worker ${names.worker}`);
 	if (existing.databaseId && !databaseOurs) taken.push(`the D1 database ${names.database}`);
@@ -178,6 +183,8 @@ export async function deployTrack(
 	let steps: Step[] = record?.steps ?? [];
 	let address = record?.address ?? null;
 	let databaseId = existing.databaseId;
+	let workerCreated = record?.workerCreated === true || finishedDeploy;
+	let bucketCreated = record?.bucketCreated === true || finishedDeploy;
 
 	const save = () =>
 		saveRecord(sys, {
@@ -186,9 +193,11 @@ export async function deployTrack(
 			accountName: account.name,
 			release,
 			worker: names.worker,
+			workerCreated,
 			database: names.database,
 			databaseId,
 			bucket: names.bucket,
+			bucketCreated,
 			address,
 			steps,
 			updatedAt: new Date(sys.now()).toISOString(),
@@ -217,11 +226,15 @@ export async function deployTrack(
 			},
 		);
 		if (deploy.status !== 0) {
-			// The database was free when the plan was made, so one there now is the one this deploy
-			// made; its id lets the next run tell it from a database made by someone else.
-			databaseId = await lookUp(wrangler, { ...names, bucket: null }).then(
-				(found) => found.databaseId,
-				() => databaseId,
+			// Every resource was free when the plan was made, so one there now is the one this
+			// deploy made; those proofs let the next run tell them from someone else's.
+			await lookUp(wrangler, names).then(
+				(found) => {
+					databaseId = found.databaseId;
+					workerCreated = found.worker;
+					bucketCreated = found.bucket;
+				},
+				() => undefined,
 			);
 			await save();
 			throw new CliError(
@@ -232,7 +245,10 @@ export async function deployTrack(
 		}
 		const pattern = new RegExp(`https://${names.worker}\\.[a-z0-9-]+\\.workers\\.dev`);
 		address = pattern.exec(`${deploy.stdout}\n${deploy.stderr}`)?.[0] ?? address;
-		databaseId = (await lookUp(wrangler, { ...names, bucket: null })).databaseId;
+		const found = await lookUp(wrangler, names);
+		databaseId = found.databaseId;
+		workerCreated = found.worker;
+		bucketCreated = found.bucket;
 		steps = addStep(steps, "deployed");
 		await save();
 	}
