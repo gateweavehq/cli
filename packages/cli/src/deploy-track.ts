@@ -15,13 +15,15 @@ export interface DeployTrackOptions {
 	account?: string;
 	attachments: boolean;
 	yes: boolean;
+	/** Whether the account's name may appear in the output. */
+	accountName: boolean;
 }
 
 export interface DeployTrackResult {
 	ok: true;
 	product: "track";
 	release: string;
-	account: { id: string; name: string };
+	account: { id: string; name?: string };
 	address: string;
 	worker: string;
 	database: { name: string; id: string | null };
@@ -100,7 +102,11 @@ export async function deployTrack(
 			env,
 		});
 
-	const account = await chooseAccount(sys, wrangler, pins, options.account);
+	const showAccountName = options.accountName;
+	const account = await chooseAccount(sys, wrangler, pins, options.account, showAccountName);
+	const accountLabel = showAccountName
+		? `account ${account.name} (${account.id})`
+		: `account ${account.id}`;
 	env = { ...sys.env, CLOUDFLARE_ACCOUNT_ID: account.id };
 
 	const names: TrackNames = {
@@ -155,7 +161,7 @@ export async function deployTrack(
 		throw new CliError(
 			"name-taken",
 			"name-taken",
-			`${taken.join(", ")} already exist${taken.length === 1 ? "s" : ""} in ${account.name}, and this tool did not make ${taken.length === 1 ? "it" : "them"}. Nothing was changed. Choose another name with --name.`,
+			`${taken.join(", ")} already exist${taken.length === 1 ? "s" : ""} in ${accountLabel}, and this tool did not make ${taken.length === 1 ? "it" : "them"}. Nothing was changed. Choose another name with --name.`,
 		);
 	}
 
@@ -163,7 +169,7 @@ export async function deployTrack(
 	const state = (exists: boolean) => (exists ? "made by an earlier run" : "new");
 
 	// The plan.
-	say(`Deploy Track ${release} into the Cloudflare account ${account.name} (${account.id}):`);
+	say(`Deploy Track ${release} into the Cloudflare ${accountLabel}:`);
 	say(`  Worker               ${names.worker}  (${state(existing.worker)})`);
 	say(`  D1 database          ${names.database}  (${state(existing.databaseId !== null)})`);
 	say(
@@ -264,7 +270,7 @@ export async function deployTrack(
 		ok: true,
 		product: "track",
 		release,
-		account,
+		account: showAccountName ? account : { id: account.id },
 		address,
 		worker: names.worker,
 		database: { name: names.database, id: databaseId },
@@ -285,6 +291,7 @@ export async function chooseAccount(
 	wrangler: (args: string[]) => Promise<RunResult>,
 	pins: Pins,
 	wanted: string | undefined,
+	showNames = true,
 ): Promise<Account> {
 	const whoami = await wrangler(["whoami", "--json"]);
 	let accounts: Account[] = [];
@@ -299,7 +306,9 @@ export async function chooseAccount(
 			`Wrangler is not signed in to Cloudflare. Run \`npx wrangler@${pins.wrangler} login\`, or set CLOUDFLARE_API_TOKEN.`,
 		);
 	}
-	const list = accounts.map(({ id, name }) => `  ${name}  ${id}`).join("\n");
+	const list = accounts
+		.map(({ id, name }) => (showNames ? `  ${name}  ${id}` : `  ${id}`))
+		.join("\n");
 	const id = wanted ?? sys.env.CLOUDFLARE_ACCOUNT_ID;
 	if (id) {
 		const account = accounts.find((candidate) => candidate.id === id);

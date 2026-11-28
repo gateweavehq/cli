@@ -17,7 +17,7 @@ yet. Each release is a tarball you run with `npx` (see [Install](#install)); it 
 ## `gateweave deploy track`
 
 ```
-gateweave deploy track [--name <name>] [--release vX.Y.Z] [--account <id>] [--no-attachments] [--yes] [--json]
+gateweave deploy track [--name <name>] [--release vX.Y.Z] [--account <id>] [--no-attachments] [--no-account-name] [--yes] [--json]
 ```
 
 It needs Node 22 or newer with npm, git, and Wrangler signed in (`npx wrangler login`, or
@@ -51,6 +51,9 @@ removal by hand is refused.
 
 With `--json`, stdout holds one object: the result, or `{ "ok": false, "code", "reason" }`.
 In the result, `account` is `{ "id", "name" }` and nothing else of Wrangler's account record.
+Cloudflare often names an account `<email>'s Account`. With `--no-account-name`, the human output
+and the JSON result carry only the account id, so output pasted into an issue does not carry that
+address; the JSON `account` is then `{ "id" }`.
 
 | Exit code | Meaning                                                                                   |
 | --------- | ----------------------------------------------------------------------------------------- |
