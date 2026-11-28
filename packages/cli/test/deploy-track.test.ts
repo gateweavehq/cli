@@ -323,6 +323,48 @@ describe("gateweave deploy track", () => {
 		assert.equal(second.result.deployedNow, true);
 	});
 
+	for (const [what, take] of [
+		[
+			"Worker",
+			(fake: ReturnType<typeof fakeSystem>, name: string) => {
+				fake.cloud.workers.add(name);
+			},
+		],
+		[
+			"D1 database",
+			(fake: ReturnType<typeof fakeSystem>, name: string) => {
+				fake.cloud.databases.set(name, "someone-elses-uuid");
+			},
+		],
+		[
+			"R2 bucket",
+			(fake: ReturnType<typeof fakeSystem>, name: string) => {
+				fake.cloud.buckets.add(`${name}-files`);
+			},
+		],
+	] as const) {
+		test(`a record saved before creation does not claim someone else's ${what}`, async () => {
+			const failing = { cloneFails: true };
+			const fake = fakeSystem(failing);
+			const name = "gwcli-s1-accede";
+			const first = await deploy(["--name", name, "--yes", "--json"], {}, fake);
+			assert.equal(first.code, 8);
+			const [record] = JSON.parse(readFileSync(recordPath(fake.sys), "utf8")).deployments;
+			assert.deepEqual(record.steps, []);
+			take(fake, name);
+			failing.cloneFails = false;
+			fake.calls.length = 0;
+			fake.output.out = "";
+			const second = await deploy(["--name", name, "--yes", "--json"], {}, fake);
+			assert.equal(second.code, 6);
+			assert.equal(second.result.code, "name-taken");
+			assert.deepEqual(
+				fake.calls.filter((call) => !readsOnly(call)),
+				[],
+			);
+		});
+	}
+
 	test("a taken name with a record for another name is still refused", async () => {
 		const fake = fakeSystem();
 		await deploy(["--name", "gwcli-s1-111111", "--yes"], {}, fake);
