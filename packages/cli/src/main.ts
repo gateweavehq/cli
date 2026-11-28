@@ -17,6 +17,7 @@ Options:
   --account <id>      The Cloudflare account, when the sign-in reaches several.
                       Default: CLOUDFLARE_ACCOUNT_ID.
   --no-attachments    Deploy without the R2 bucket: attached files are off.
+  --no-account-name   Print only the Cloudflare account id, never its name.
   --yes               Create without asking. Needed when there is no terminal.
   --json              Print the result, or the failure, as one JSON object on stdout.
   --help              Show this.
@@ -47,8 +48,9 @@ Each finding is ok, warn or fail. The exit code is 1 when there is a fail, else 
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,55}[a-z0-9])?$/;
 
 function describe(result: DeployTrackResult): string {
+	const account = result.account.name ?? `account ${result.account.id}`;
 	const lines = [
-		`Track ${result.release} is ${result.deployedNow ? "deployed" : "already deployed"} in ${result.account.name}.`,
+		`Track ${result.release} is ${result.deployedNow ? "deployed" : "already deployed"} in ${account}.`,
 		"",
 		`  Address              ${result.address}`,
 		`  Worker               ${result.worker}`,
@@ -115,9 +117,9 @@ export async function main(argv: string[], sys: System): Promise<number> {
 			);
 		}
 		// Another command's options are refused, not ignored, so a typo cannot pass for a choice.
-		const foreign = (doctor ? ["release", "no-attachments", "yes"] : ["url"]).filter(
-			(option) => values[option as keyof typeof values] !== undefined,
-		);
+		const foreign = (
+			doctor ? ["release", "no-attachments", "no-account-name", "yes"] : ["url"]
+		).filter((option) => values[option as keyof typeof values] !== undefined);
 		if (foreign.length > 0) {
 			throw new CliError(
 				"usage",
@@ -151,6 +153,7 @@ export async function main(argv: string[], sys: System): Promise<number> {
 			account: values.account,
 			attachments: values["no-attachments"] !== true,
 			yes: values.yes === true,
+			accountName: values["no-account-name"] !== true,
 		});
 		sys.out(json ? `${JSON.stringify(result)}\n` : describe(result));
 		return 0;
@@ -171,6 +174,7 @@ function parse(argv: string[]) {
 			release: { type: "string" },
 			account: { type: "string" },
 			"no-attachments": { type: "boolean" },
+			"no-account-name": { type: "boolean" },
 			yes: { type: "boolean", short: "y" },
 			json: { type: "boolean" },
 			help: { type: "boolean", short: "h" },

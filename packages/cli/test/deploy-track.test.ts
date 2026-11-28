@@ -211,6 +211,21 @@ describe("gateweave deploy track", () => {
 		assert.doesNotMatch(JSON.stringify(result), /abuse_contact_email|legacy_flags|created_on/);
 	});
 
+	test("--no-account-name keeps an email-shaped account name out of the output", async () => {
+		const account = { id: "a1b2c3", name: "owner@example.invalid's Account" };
+		const asJson = await deploy(["--yes", "--json", "--no-account-name"], {
+			accounts: [account],
+		});
+		assert.equal(asJson.code, 0);
+		assert.deepEqual(asJson.result.account, { id: "a1b2c3" });
+		assert.doesNotMatch(asJson.output.out + asJson.output.err, /owner@example\.invalid/);
+
+		const human = await deploy(["--yes", "--no-account-name"], { accounts: [account] });
+		assert.equal(human.code, 0);
+		assert.doesNotMatch(human.output.out + human.output.err, /owner@example\.invalid/);
+		assert.match(human.output.out + human.output.err, /a1b2c3/);
+	});
+
 	test("takes the account from CLOUDFLARE_ACCOUNT_ID", async () => {
 		const accounts = [
 			{ id: "1111", name: "First" },
